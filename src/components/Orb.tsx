@@ -1,5 +1,10 @@
 "use client";
 
+/* Vendored from the aicss registry (`shadcn add .../orbs.json`). It ships with
+   a few unused declarations; the rule is off for this file so an upstream
+   detail cannot fail our build. Local fixes are documented in the README. */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import type { CSSProperties } from "react";
 import styles from "./Orb.module.css";
 

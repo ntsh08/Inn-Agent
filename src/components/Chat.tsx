@@ -515,6 +515,8 @@ function Row({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // `node` is pulled out only to keep it off the <table> element.
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           table({ node, ...props }) {
             return (
               <div className="table-wrap">

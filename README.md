@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# INA Procure — procurement agent prototype
 
-## Getting Started
+A working procurement assistant for a construction project. Real model, real
+tool-calling, staged data. Built to mirror the architecture of the Inncircles
+INA agents so the patterns are recognisable side by side.
 
-First, run the development server:
+## The flow it's built around
+
+1. **"What are we short on?"** — checks the plan against site stock, returns the shortfall
+2. **"Sort out the cement"** — proposes a plan → user approves
+3. Compares approved vendors, weighs rate against lead time and the need-by date
+4. **Purchase order card** → user approves → PO issued
+
+## Running it
 
 ```bash
+npm install
+echo "OPENAI_API_KEY=sk-..." > .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`MODEL` defaults to `gpt-5-mini`; override it in `.env.local`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it's put together
 
-## Learn More
+| File | What it holds |
+|---|---|
+| `src/lib/prompt.ts` | System prompt, assembled from named blocks (scope, authority, rules, hygiene, planning) |
+| `src/lib/tools.ts` | Tool registry. Descriptions teach the model; `requiresApproval` marks the gated ones |
+| `src/lib/skills.ts` | Skill bodies, loaded on demand via `load_skill` rather than sitting in the prompt |
+| `src/lib/cards.ts` | Turns a gated tool call into something a human can judge in five seconds |
+| `src/lib/data.ts` | All staged records — materials, stock, vendors, quotes, rate history, POs |
+| `src/app/api/chat/route.ts` | The tool loop and the approval gate |
 
-To learn more about Next.js, take a look at the following resources:
+### The approval gate
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+When the model calls a tool marked `requiresApproval`, the server **stops before
+executing it** and sends the client a card. Nothing is written until a decision
+comes back. Reads run freely; anything that commits money does not.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This is the one rule worth taking away: *the agent does the gathering, the human
+does the committing.*
 
-## Deploy on Vercel
+### What it refuses
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Deliberate, and part of the point — an agent that will do anything reads as a toy.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- No payments, ever
+- No adding or approving vendors
+- No contacting vendors directly
+- No contract or legal terms
+- Nothing outside procurement — it names the sibling assistant instead
+
+## Deploying
+
+Push to a repo, import in Vercel, set `OPENAI_API_KEY` as an environment
+variable. The key is only ever read inside the API route — it never reaches the
+browser.
+
+The endpoint rate-limits to 12 messages per IP per minute and caps conversation
+length. Set a hard spend limit on the API key as a backstop before sharing the
+link publicly.

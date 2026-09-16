@@ -11,7 +11,6 @@ import AgentTrace from "./AgentTrace";
 import QuestionCard from "./QuestionCard";
 import PurchaseOrderPanel from "./PurchaseOrderPanel";
 import ChatHistoryPanel, { type PastChat } from "./ChatHistoryPanel";
-import SuiteNav from "./SuiteNav";
 import type { Card } from "@/lib/cards";
 import { USER } from "@/lib/data";
 
@@ -417,8 +416,7 @@ export default function Chat() {
   }, [settled, bubbles.length]);
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-bg">
-      <SuiteNav />
+    <div className="flex min-h-0 flex-1 flex-col bg-bg">
       <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* header */}
@@ -856,7 +854,7 @@ function Empty({ onPick, composer }: { onPick: (t: string) => void; composer: Re
     // the page the moment there is a transcript to sit under.
     <div className="flex min-h-[calc(100dvh-96px)] flex-col justify-center py-10">
       <h1 className="text-center text-[32px] font-normal tracking-[-0.02em] text-txt">
-        Hi {USER.firstName}, what are we buying today?
+        Hi {USER.firstName}, what are we buying?
       </h1>
       <div className="mt-5">{composer}</div>
 

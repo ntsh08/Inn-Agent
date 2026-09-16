@@ -79,8 +79,13 @@ export function parseSources(text: string): { body: string; sources: Source[] } 
   };
 }
 
-/** A record name as a URL segment — "PO-2026-0412", "acme-building-materials". */
-function slug(record: string) {
+/**
+ * A record name as a URL segment — "PO-2026-0412", "acme-building-materials".
+ *
+ * Exported because the section pages anchor their rows with it: a citation
+ * that slugs differently from the page it points at lands nowhere, silently.
+ */
+export function slug(record: string) {
   return record
     .trim()
     .toLowerCase()

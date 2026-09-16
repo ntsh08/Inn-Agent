@@ -6,7 +6,14 @@
  * out the totals, and puts the number being committed where it cannot be missed.
  */
 
-import { GST_RATE, PURCHASE_ORDERS, materialById, vendorById, PROJECT } from "./data";
+import {
+  GST_RATE,
+  PURCHASE_ORDERS,
+  materialById,
+  vendorById,
+  PROJECT,
+  type PurchaseOrder,
+} from "./data";
 
 export type QuestionsCard = {
   kind: "questions";
@@ -40,6 +47,8 @@ export type PoCard = {
   gst: string;
   total: string;
   deliverBy: string;
+  /** When it was raised. Absent while it is still being drafted — that is today. */
+  raisedOn?: string;
   /** Days between delivery and the tightest need-by date. Negative means late. */
   floatDays?: number;
   deliverTo: string;
@@ -65,6 +74,47 @@ const prettyDate = (iso: string) => {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 };
+
+/**
+ * A purchase order already on file, as the same document the agent drafts.
+ *
+ * One shape for both, so an order does not look like a different thing
+ * depending on whether you reached it from the conversation or from the list.
+ * Float here is measured against the material's need-by date, exactly as it is
+ * when the order is being raised.
+ */
+export function cardFromOrder(po: PurchaseOrder): PoCard {
+  const v = vendorById(po.vendorId);
+  const m = materialById(po.materialId);
+  const subtotal = po.qty * po.rate;
+  const gst = subtotal * GST_RATE;
+
+  return {
+    kind: "po",
+    reference: po.poNumber,
+    vendor: v?.name ?? po.vendorId,
+    vendorLocation: v?.location,
+    vendorRating: v?.rating,
+    vendorOnTime: v?.onTimePct,
+    items: [
+      {
+        material: m ? `${m.name} — ${m.spec}` : po.materialId,
+        quantity: `${new Intl.NumberFormat("en-IN").format(po.qty)} ${m?.unit ?? ""}`.trim(),
+        rate: `${inr(po.rate)} per ${m?.unit?.replace(/s$/, "") ?? "unit"}`,
+        amount: inr(subtotal),
+      },
+    ],
+    subtotal: inr(subtotal),
+    gst: `${inr(gst)} (${Math.round(GST_RATE * 100)}%)`,
+    total: inr(subtotal + gst),
+    deliverBy: prettyDate(po.expectedOn),
+    raisedOn: prettyDate(po.raisedOn),
+    floatDays: m ? dayGap(po.expectedOn, m.neededBy) : undefined,
+    deliverTo: PROJECT.site,
+    neededFor: m?.activity,
+    justification: "",
+  };
+}
 
 export function buildCard(toolName: string, args: any): Card {
   if (toolName === "ask_user") {

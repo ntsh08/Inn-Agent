@@ -252,6 +252,19 @@ export function materialById(id: string) {
 export function vendorById(id: string) {
   return VENDORS.find((v) => v.id === id);
 }
+/**
+ * Roughly how long this material takes to arrive, averaged over its vendors.
+ *
+ * Lead time belongs to a quote, not a material — the same cement is 2 days
+ * from one vendor and 8 from another — so the table shows the average and
+ * leaves the per-vendor spread to a quote comparison, where it is actionable.
+ */
+export function leadTime(materialId: string) {
+  const days = QUOTES.filter((q) => q.materialId === materialId).map((q) => q.leadDays);
+  if (!days.length) return null;
+  return Math.round(days.reduce((sum, d) => sum + d, 0) / days.length);
+}
+
 export function available(m: Material) {
   return m.inStock - m.reserved;
 }

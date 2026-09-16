@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, Fragment, useMemo } from "react";
 import { parseSources, type Source } from "@/lib/sources";
+import SourcePanel from "./SourcePanel";
 import { clockTime, timestampParts } from "@/lib/time";
 import { flushSync } from "react-dom";
 import ReactMarkdown from "react-markdown";
@@ -74,6 +75,7 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [panelId, setPanelId] = useState<string | null>(null);
+  const [sourcePanel, setSourcePanel] = useState<Source | null>(null);
   const [chats, setChats] = useState<PastChat[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -339,6 +341,7 @@ export default function Chat() {
     setTitle(null);
     setChatId(null);
     setPanelId(null);
+    setSourcePanel(null);
     setFollowups([]);
     askedFor.current = -1;
   }
@@ -354,6 +357,7 @@ export default function Chat() {
     setInput("");
     setFiles([]);
     setPanelId(null);
+    setSourcePanel(null);
     setFollowups([]);
     askedFor.current = (target.bubbles as Bubble[]).length;
   }
@@ -436,6 +440,7 @@ export default function Chat() {
               active={historyOpen}
               onClick={() => {
                 setPanelId(null);
+                setSourcePanel(null);
                 setHistoryOpen((v) => !v);
               }}
             >
@@ -476,7 +481,14 @@ export default function Chat() {
                   onAnswer={answer}
                   onView={() => {
                     setHistoryOpen(false);
+                    setSourcePanel(null);
                     setPanelId(b.kind === "card" ? b.id : null);
+                  }}
+                  onSource={(s) => {
+                    // One column on the right, whatever is in it.
+                    setHistoryOpen(false);
+                    setPanelId(null);
+                    setSourcePanel(s);
                   }}
                   live={busy && i === bubbles.length - 1}
                 />
@@ -519,6 +531,10 @@ export default function Chat() {
         />
       )}
 
+      {sourcePanel && (
+        <SourcePanel source={sourcePanel} onClose={() => setSourcePanel(null)} />
+      )}
+
       {panelCard && (
         <PurchaseOrderPanel
           card={panelCard}
@@ -536,12 +552,14 @@ function Row({
   onDecide,
   onAnswer,
   onView,
+  onSource,
   live = false,
 }: {
   b: Bubble;
   onDecide: (id: string, d: "approve" | "reject") => void;
   onAnswer: (id: string, questions: { question: string }[], picked: (string | null)[]) => void;
   onView: () => void;
+  onSource: (s: Source) => void;
   live?: boolean;
 }) {
   if (b.kind === "user") return <UserBubble text={b.text} at={b.at} />;
@@ -600,12 +618,20 @@ function Row({
         {b.text}
       </ReactMarkdown>
       </div>
-      {b.kind === "agent" && b.sources?.length ? <Sources sources={b.sources} /> : null}
+      {b.kind === "agent" && b.sources?.length ? (
+        <Sources sources={b.sources} onOpen={onSource} />
+      ) : null}
     </div>
   );
 }
 
-function Sources({ sources }: { sources: Source[] }) {
+function Sources({
+  sources,
+  onOpen,
+}: {
+  sources: Source[];
+  onOpen: (s: Source) => void;
+}) {
   return (
     <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-txt-faint">
       <span>{sources.length > 1 ? "Sources" : "Source"}</span>
@@ -614,15 +640,17 @@ function Sources({ sources }: { sources: Source[] }) {
           {i > 0 && <span aria-hidden>·</span>}
           {/* The path is the link target, not something to read — printing it
               next to the name just said the same word twice. */}
-          <a
-            href={s.page}
+          {/* A button, not a link: checking a source should open it beside
+              the conversation, not navigate out of the conversation. */}
+          <button
+            onClick={() => onOpen(s)}
             title={s.page}
             className="underline decoration-line underline-offset-2 transition-colors hover:text-txt-dim"
           >
             {/* The register stays in front of a record so "PO-2026-0412"
                 still says which system it was read from. */}
             {s.record ? `${s.label} / ${s.record}` : s.label}
-          </a>
+          </button>
         </span>
       ))}
     </p>

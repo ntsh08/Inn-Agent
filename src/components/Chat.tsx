@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Fragment, useMemo } from "react";
+import { parseSources, type Source } from "@/lib/sources";
+import { clockTime, timestampParts } from "@/lib/time";
 import { flushSync } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,10 +23,10 @@ function provisionalTitle(text: string) {
 
 const CHATS_KEY = "ina-procure:chats";
 
-type Source = { label: string; page: string };
+
 
 type Bubble =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; at?: number }
   | { kind: "agent"; text: string; sources?: Source[] }
   | {
       kind: "tools";
@@ -39,12 +41,19 @@ type Bubble =
     }
   | { kind: "error"; text: string };
 
-// Three, covering the three things worth knowing this agent can do: see the
-// problem, fix it, and catch the expensive mistake before it is made.
+// Four rows that between them describe the job: what the agent is, where the
+// gap is, how a buying decision gets made, and what is already on order. The
+// first spends a slot on orientation on purpose — a first-time visitor who
+// does not know what this is otherwise leaves without asking anything.
+// An hour of quiet is long enough that the next message reads as a fresh
+// sitting, and wants its own header. Below that, one header covers the lot.
+const GAP = 60 * 60 * 1000;
+
 const SUGGESTIONS = [
-  "What are we short on?",
-  "Sort out the cement shortfall",
-  "Are there any orders already in transit?",
+  "What can you help me with?",
+  "What materials are we short on?",
+  "Compare cement rates before I order",
+  "Which POs are raised but not delivered?",
 ];
 
 /** The distinct places the most recent run of tools read from. */
@@ -71,6 +80,10 @@ export default function Chat() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState<string | null>(null);
+  const [followups, setFollowups] = useState<string[]>([]);
+  // Which transcript length the current suggestions belong to, so a re-render
+  // never re-asks for the same turn.
+  const askedFor = useRef(-1);
   const scroller = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
 
@@ -117,17 +130,30 @@ export default function Chat() {
 
           if (ev.t === "text") {
             acc += ev.v;
+            // What the model cites wins: it is the only party that knows which
+            // facts it leaned on, including ones carried over from an earlier
+            // turn. The tools that ran are the fallback for a reply that says
+            // nothing, which is how this behaved before it was asked to.
+            const { body, sources: cited } = parseSources(acc);
             setBubbles((b) => {
               const next = [...b];
               if (textIndex === -1 || next[textIndex]?.kind !== "agent") {
-                next.push({ kind: "agent", text: acc, sources: sourcesBehind(next) });
+                next.push({
+                  kind: "agent",
+                  text: body,
+                  sources: cited.length ? cited : sourcesBehind(next),
+                });
                 textIndex = next.length - 1;
               } else {
                 const prev = next[textIndex];
                 next[textIndex] = {
                   kind: "agent",
-                  text: acc,
-                  sources: prev.kind === "agent" ? prev.sources : undefined,
+                  text: body,
+                  sources: cited.length
+                    ? cited
+                    : prev.kind === "agent"
+                      ? prev.sources
+                      : undefined,
                 };
               }
               return next;
@@ -196,9 +222,10 @@ export default function Chat() {
 
     const commit = () => {
       if (!chatId) setChatId(String(Date.now()));
+      setFollowups([]);
       setInput("");
       setFiles([]);
-      setBubbles((b) => [...b, { kind: "user", text: t }]);
+      setBubbles((b) => [...b, { kind: "user", text: t, at: Date.now() }]);
       setHistory(next);
     };
 
@@ -313,6 +340,8 @@ export default function Chat() {
     setTitle(null);
     setChatId(null);
     setPanelId(null);
+    setFollowups([]);
+    askedFor.current = -1;
   }
 
   function openChat(id: string) {
@@ -326,6 +355,8 @@ export default function Chat() {
     setInput("");
     setFiles([]);
     setPanelId(null);
+    setFollowups([]);
+    askedFor.current = (target.bubbles as Bubble[]).length;
   }
 
   const started = bubbles.length > 0;
@@ -337,8 +368,53 @@ export default function Chat() {
   const panelCard =
     panelBubble?.kind === "card" && panelBubble.card.kind === "po" ? panelBubble.card : null;
 
+  // Where a "Today 2:27 PM" line goes: above the first message, and again
+  // whenever enough time has passed that the reader would have lost the thread
+  // of when they were last here.
+  const marks = useMemo(() => {
+    const out: (number | null)[] = bubbles.map(() => null);
+    let previous: number | null = null;
+    bubbles.forEach((b, i) => {
+      if (b.kind !== "user" || b.at == null) return;
+      if (previous === null || b.at - previous > GAP) out[i] = b.at;
+      previous = b.at;
+    });
+    return out;
+  }, [bubbles]);
+
   const last = bubbles[bubbles.length - 1];
   const showThinking = busy && last?.kind !== "tools" && last?.kind !== "agent";
+
+  // Suggestions belong to a finished turn. A card still waiting on the user is
+  // the question, so nothing else should be competing with it.
+  const settled = !busy && last?.kind === "agent";
+
+  useEffect(() => {
+    if (!settled || askedFor.current === bubbles.length) return;
+    askedFor.current = bubbles.length;
+
+    const agentText = last?.kind === "agent" ? last.text : "";
+    const userText = [...bubbles].reverse().find((b) => b.kind === "user");
+
+    const controller = new AbortController();
+    fetch("/api/followups", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agent: agentText,
+        user: userText?.kind === "user" ? userText.text : "",
+      }),
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((d) => setFollowups(Array.isArray(d.suggestions) ? d.suggestions : []))
+      .catch(() => {
+        // No suggestions is a fine outcome — the composer is right there.
+      });
+
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled, bubbles.length]);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-bg">
@@ -394,8 +470,9 @@ export default function Chat() {
           ) : (
             <div className="space-y-5 py-8">
               {bubbles.map((b, i) => (
+                <Fragment key={i}>
+                {marks[i] != null && <TimeMark at={marks[i]!} />}
                 <Row
-                  key={i}
                   b={b}
                   onDecide={decide}
                   onAnswer={answer}
@@ -405,8 +482,12 @@ export default function Chat() {
                   }}
                   live={busy && i === bubbles.length - 1}
                 />
+                </Fragment>
               ))}
               {showThinking && <Thinking />}
+              {settled && followups.length > 0 && (
+                <FollowUps items={followups} onPick={send} />
+              )}
               <div className="h-2" />
             </div>
           )}
@@ -465,15 +546,7 @@ function Row({
   onView: () => void;
   live?: boolean;
 }) {
-  if (b.kind === "user") {
-    return (
-      <div className="animate-rise flex justify-end">
-        <div className="max-w-[80%] rounded-[10px] border border-line-soft bg-raised px-3.5 py-2 text-[13.5px] leading-relaxed text-txt">
-          {b.text}
-        </div>
-      </div>
-    );
-  }
+  if (b.kind === "user") return <UserBubble text={b.text} at={b.at} />;
 
   if (b.kind === "tools") {
     return <AgentTrace items={b.items} live={live} />;
@@ -548,7 +621,9 @@ function Sources({ sources }: { sources: Source[] }) {
             title={s.page}
             className="underline decoration-line underline-offset-2 transition-colors hover:text-txt-dim"
           >
-            {s.label}
+            {/* The register stays in front of a record so "PO-2026-0412"
+                still says which system it was read from. */}
+            {s.record ? `${s.label} / ${s.record}` : s.label}
           </a>
         </span>
       ))}
@@ -728,7 +803,7 @@ function Composer({
           }
         }}
         rows={1}
-        placeholder="Ask Anything"
+        placeholder="Ask about stock, rates or orders"
         disabled={busy}
         className="max-h-40 w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-relaxed outline-none placeholder:text-txt-faint disabled:opacity-50"
         onInput={(e) => {
@@ -781,7 +856,7 @@ function Empty({ onPick, composer }: { onPick: (t: string) => void; composer: Re
     // the page the moment there is a transcript to sit under.
     <div className="flex min-h-[calc(100dvh-96px)] flex-col justify-center py-10">
       <h1 className="text-center text-[32px] font-normal tracking-[-0.02em] text-txt">
-        {USER.firstName}, what’s on the list today?
+        Hi {USER.firstName}, what are we buying today?
       </h1>
       <div className="mt-5">{composer}</div>
 
@@ -812,5 +887,125 @@ function Empty({ onPick, composer }: { onPick: (t: string) => void; composer: Re
         ))}
       </div>
     </div>
+  );
+}
+
+
+/**
+ * What the user said, with the time and a copy control that surface on hover.
+ *
+ * The meta row keeps its space whether or not it is visible, so the transcript
+ * does not shift under the pointer as you move down it.
+ */
+function UserBubble({ text, at }: { text: string; at?: number }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    if (await write(text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    }
+    // A clipboard that refuses both routes is the browser's call, not an
+    // error worth putting in front of the user.
+  }
+
+  return (
+    <div className="animate-rise group flex flex-col items-end">
+      <div className="max-w-[80%] rounded-[10px] border border-line-soft bg-raised px-3.5 py-2 text-[13.5px] leading-relaxed text-txt">
+        {text}
+      </div>
+
+      <div className="mt-1 flex h-[18px] items-center gap-2 pr-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <button
+          onClick={copy}
+          aria-label={copied ? "Copied" : "Copy message"}
+          className="rounded-[4px] p-0.5 text-txt-faint transition-colors hover:text-txt-dim"
+        >
+          {copied ? (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="11" height="11" rx="2" />
+              <path d="M5 15V5a2 2 0 012-2h8" />
+            </svg>
+          )}
+        </button>
+        {at != null && (
+          <span className="text-[11px] text-txt-faint">{clockTime(at)}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Puts text on the clipboard, by whichever route the browser allows.
+ *
+ * The async API is the right one, but embedded and older browsers deny it
+ * outright — so a denial falls through to the selection trick rather than
+ * leaving the button dead.
+ */
+async function write(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // fall through
+  }
+
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where the conversation could go next.
+ *
+ * Suggestions sit under the reply rather than in the composer: they are the
+ * agent offering, not the user typing, and picking one sends it as-is.
+ */
+function FollowUps({ items, onPick }: { items: string[]; onPick: (t: string) => void }) {
+  return (
+    <div className="animate-fade flex flex-wrap gap-2 pt-1">
+      {items.map((s) => (
+        <button
+          key={s}
+          onClick={() => onPick(s)}
+          className="rounded-full border border-line px-3 py-[5px] text-[12.5px] text-txt-dim transition-colors hover:border-line hover:bg-raised hover:text-txt"
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * When this part of the conversation happened.
+ *
+ * Centred above the messages it introduces, the way a phone does it: the day
+ * carries the weight, the clock trails it, and inside the hour there is no
+ * clock at all — "12 min ago" is the more useful sentence.
+ */
+function TimeMark({ at }: { at: number }) {
+  const { lead, time } = timestampParts(at);
+  return (
+    <p className="pt-1 text-center text-[11.5px] text-txt-faint">
+      <span className="font-medium text-txt-dim">{lead}</span>
+      {time && <span> {time}</span>}
+    </p>
   );
 }

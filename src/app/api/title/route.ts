@@ -21,9 +21,18 @@ const SYSTEM = `Name this procurement chat in 3 to 5 words, as a heading a perso
 
 Rules:
 - Sentence case: capitalise the first word, and names like Acme or Level 4. Everything else lower case.
-- Name the material, the vendor or the task — "Cement shortfall for Level 4", "Steel rates last paid", "Orders in transit".
+- Name the material, the vendor or the task the message is actually about.
+- Titles must come from THIS message only. The examples below show shape, never content — never reuse their words when the message does not mention them.
+- A message with no material in it gets a title describing what it asks about.
 - No trailing punctuation, no quotes, no filler like "request" or "query".
 - Never exceed 40 characters.
+
+Worked examples — the title always comes from that message, never from another:
+"We're short on cement for the Level 4 slab" -> Cement shortfall for Level 4
+"What did we last pay for Fe 500D?" -> Steel rates last paid
+"Anything arriving this week?" -> Orders in transit
+"What can you help me with?" -> What this agent does
+"Which POs are raised but not delivered?" -> Open purchase orders
 
 Reply with the title alone.`;
 

@@ -25,6 +25,7 @@ import {
   vendorById,
 } from "./data";
 import { SKILLS, SKILL_BY_NAME } from "./skills";
+import { SOURCES, type Source } from "./sources";
 
 export type ToolDef = {
   name: string;
@@ -38,7 +39,7 @@ export type ToolDef = {
   /** Gated tool whose 'decision' is the user's answers rather than approve/reject. */
   collectsAnswers?: boolean;
   /** Where this tool's data comes from. Cited under any answer built on it. */
-  source?: { label: string; page: string };
+  source?: Source;
   run: (args: any) => unknown;
 };
 
@@ -53,7 +54,7 @@ export const TOOLS: ToolDef[] = [
   // ---------------------------------------------------------------- reads
   {
     name: "shortfall_report",
-    source: { label: "Inventory", page: "/inventory" },
+    source: SOURCES.inventory,
     label: "Checking stock against the plan",
     short: "Checking stock",
     description: `Compare what the project plan requires against what is actually in stock, and return every material that falls short.
@@ -81,7 +82,7 @@ Always mention the need-by date when you present these — a shortfall that is d
   },
   {
     name: "stock_check",
-    source: { label: "Inventory", page: "/inventory" },
+    source: SOURCES.inventory,
     label: "Checking site stock",
     short: "Checking stock",
     description: `Current stock position for ONE material at the project site: quantity on hand, quantity reserved against other activities, and what is genuinely free to use.
@@ -106,7 +107,7 @@ Use this when the user asks about a specific material's stock. For "what are we 
   },
   {
     name: "material_search",
-    source: { label: "Material catalogue", page: "/catalogue" },
+    source: SOURCES.catalogue,
     label: "Looking up the catalogue",
     short: "Checking catalogue",
     description: `Resolve a free-text material name to a catalogue item. Users say "cement" or "steel"; the catalogue holds "OPC 53 Grade" and "Fe 500D 16mm".
@@ -125,7 +126,7 @@ Call this before any tool that takes a materialId when all you have is a name th
   },
   {
     name: "vendor_search",
-    source: { label: "Approved vendors", page: "/vendors" },
+    source: SOURCES.vendors,
     label: "Finding approved vendors",
     short: "Finding vendors",
     description: `List vendors who supply a given material.
@@ -146,7 +147,7 @@ Returns rating (out of 5) and on-time delivery percentage — both are relevant 
   },
   {
     name: "quote_compare",
-    source: { label: "Vendor quotes", page: "/quotes" },
+    source: SOURCES.quotes,
     label: "Comparing quotes",
     short: "Comparing quotes",
     description: `Side-by-side comparison of live vendor quotes for one material: rate per unit, lead time in days, minimum order quantity, and quote validity.
@@ -192,7 +193,7 @@ Present all viable options with the tradeoff visible, recommend one, and give th
   },
   {
     name: "rate_history",
-    source: { label: "Purchase orders", page: "/orders" },
+    source: SOURCES.orders,
     label: "Pulling past rates",
     short: "Checking past rates",
     description: `What this project last paid for a material, and to whom. Use it to sanity-check a quote before recommending it — a rate well above the last purchase is worth flagging to the user, and a rate below it is worth pointing out as a win.
@@ -211,7 +212,7 @@ Returns most recent first. Empty if the material has never been purchased.`,
   },
   {
     name: "po_search",
-    source: { label: "Purchase orders", page: "/orders" },
+    source: SOURCES.orders,
     label: "Checking open orders",
     short: "Checking orders",
     description: `List purchase orders on this project with their delivery status.

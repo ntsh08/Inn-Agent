@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { dayLabel } from "@/lib/time";
 
 export type PastChat = {
   id: string;
@@ -68,7 +69,7 @@ export default function ChatHistoryPanel({
               }`}
             >
               <span className="line-clamp-2 text-[12.5px] leading-snug text-txt">{c.title}</span>
-              <span className="text-[11px] text-txt-faint">{when(c.at)}</span>
+              <span className="text-[11px] text-txt-faint">{dayLabel(c.at)}</span>
             </button>
           ))
         )}
@@ -77,15 +78,3 @@ export default function ChatHistoryPanel({
   );
 }
 
-/** Short relative date — enough to find a thread, not a full timestamp. */
-function when(at: number) {
-  const mins = Math.round((Date.now() - at) / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} hr ago`;
-  const days = Math.round(hrs / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  return new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}

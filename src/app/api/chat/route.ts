@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
       try {
         // ---- resume: the previous turn stopped on an approval gate ----------
         const pending = messages[messages.length - 1];
-        if (pending?.role === "assistant" && pending.tool_calls?.length) {
+        const resuming = pending?.role === "assistant" && !!pending.tool_calls?.length;
+        if (resuming) {
           for (const call of pending.tool_calls) {
             const decision = decisions[call.id] ?? "reject";
             const args = JSON.parse(call.function.arguments || "{}");
@@ -136,9 +137,14 @@ export async function POST(req: NextRequest) {
             messages: [{ role: "system", content: buildSystemPrompt() }, ...messages],
             tools: OPENAI_TOOLS,
             stream: true,
-            // Keeps latency demo-tolerable. This agent's reasoning is shallow —
-            // compare a few numbers against a date — so deep thinking buys nothing.
-            ...(MODEL.startsWith("gpt-5") ? { reasoning_effort: "low" as const } : {}),
+            // The first step thinks as little as possible, so a greeting or a
+            // simple question answers in about two seconds. Once the agent is
+            // doing real work — a later step, or resuming after a card — it
+            // thinks more, because at "minimal" it skipped the sourcing card,
+            // announced POs it never raised, and looped on catalogue searches.
+            ...(MODEL.startsWith("gpt-5")
+              ? { reasoning_effort: step === 0 && !resuming ? ("minimal" as const) : ("low" as const) }
+              : {}),
           });
 
           let text = "";

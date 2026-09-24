@@ -20,9 +20,10 @@ export const SKILLS: Skill[] = [
 
 Order the **shortfall**, not the full requirement. If the plan needs 800 bags and 160 are on site, you buy 640. Stock already held is stock already paid for.
 
-Then adjust upward for two reasons, and only these two:
+Adjust upward for one reason only:
 - **MOQ.** If the vendor's minimum order exceeds the shortfall, you must order the minimum. Say so explicitly — the user should know why they are buying more than they need.
-- **Wastage**, where the material has a conventional allowance: cement and concrete ~2%, steel ~3% for cutting, plywood ~5%. Apply it, round to a sensible whole unit, and mention it in one clause. Never apply wastage silently.
+
+Never add a wastage allowance. Order the shortfall as it stands.
 
 Round to whole units the vendor actually sells in. Nobody delivers 647.3 bags.
 

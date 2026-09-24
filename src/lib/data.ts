@@ -265,6 +265,21 @@ export function leadTime(materialId: string) {
   return Math.round(days.reduce((sum, d) => sum + d, 0) / days.length);
 }
 
+/**
+ * When an order from this vendor would land: today plus the slowest quoted
+ * lead time among the materials on it. Null when the vendor has no live quote
+ * for one of them — then there is nothing to calculate from.
+ */
+export function arrivalDate(vendorId: string, materialIds: string[]) {
+  const leads = materialIds.map(
+    (id) => QUOTES.find((q) => q.vendorId === vendorId && q.materialId === id)?.leadDays,
+  );
+  if (!leads.length || leads.some((d) => d == null)) return null;
+  const d = new Date(PROJECT.today);
+  d.setDate(d.getDate() + Math.max(...(leads as number[])));
+  return d.toISOString().slice(0, 10);
+}
+
 export function available(m: Material) {
   return m.inStock - m.reserved;
 }

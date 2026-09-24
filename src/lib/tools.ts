@@ -18,6 +18,7 @@ import {
   QUOTES,
   RATE_HISTORY,
   VENDORS,
+  arrivalDate,
   available,
   daysUntil,
   materialById,
@@ -331,7 +332,8 @@ Do not ask for confirmation in chat before calling this. The approval card shows
         },
         deliverBy: {
           type: "string",
-          description: "YYYY-MM-DD. Must be on or before the earliest need-by date across the items.",
+          description:
+            "YYYY-MM-DD. Only used when this vendor has no live quote for an item. Otherwise it is ignored: the arrival date is calculated from today plus the quoted lead time.",
         },
         justification: {
           type: "string",
@@ -339,7 +341,7 @@ Do not ask for confirmation in chat before calling this. The approval card shows
             "One sentence the approver will read: why this vendor over the alternatives. The card already shows the delivery date and how much float it leaves, so do not restate either — spend the sentence on what the alternatives cost or when they would have landed.",
         },
       },
-      ["vendorId", "items", "deliverBy", "justification"],
+      ["vendorId", "items", "justification"],
     ),
     requiresApproval: true,
     run: (args: any) => {
@@ -352,6 +354,8 @@ Do not ask for confirmation in chat before calling this. The approval card shows
       }));
       const subtotal = lines.reduce((n: number, l: any) => n + l.amount, 0);
       const poNumber = `PO-2026-${String(413 + PURCHASE_ORDERS.length - 2).padStart(4, "0")}`;
+      const deliverBy =
+        arrivalDate(args.vendorId, lines.map((l: any) => l.materialId)) ?? args.deliverBy;
       // The store keeps one row per material; they share the PO number.
       for (const l of lines) {
         PURCHASE_ORDERS.push({
@@ -363,7 +367,7 @@ Do not ask for confirmation in chat before calling this. The approval card shows
           rate: l.rate,
           status: "Issued",
           raisedOn: PROJECT.today,
-          expectedOn: args.deliverBy,
+          expectedOn: deliverBy,
         });
       }
       return {
@@ -380,7 +384,7 @@ Do not ask for confirmation in chat before calling this. The approval card shows
         subtotal,
         gst: Math.round(subtotal * GST_RATE),
         total: Math.round(subtotal * (1 + GST_RATE)),
-        deliverBy: args.deliverBy,
+        deliverBy,
         status: "Issued",
       };
     },

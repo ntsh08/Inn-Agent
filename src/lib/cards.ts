@@ -9,6 +9,7 @@
 import {
   GST_RATE,
   PURCHASE_ORDERS,
+  arrivalDate,
   materialById,
   vendorById,
   PROJECT,
@@ -146,6 +147,12 @@ export function buildCard(toolName: string, args: any): Card {
     const subtotal = lines.reduce((n, l) => n + l.amount, 0);
     const gst = subtotal * GST_RATE;
 
+    // Worked out from the quote, not taken from the model — left to the model
+    // it sometimes copied the need-by date, and the card reported no float
+    // when there were days to spare.
+    const deliverBy: string | undefined =
+      arrivalDate(args.vendorId, raw.map((it) => it.materialId)) ?? args.deliverBy;
+
     // The tightest need-by across the items is what the delivery date has to beat.
     const needBys = lines.map((l) => l.m?.neededBy).filter(Boolean) as string[];
     const tightest = needBys.sort()[0];
@@ -154,7 +161,7 @@ export function buildCard(toolName: string, args: any): Card {
     let warning: string | undefined;
     if (v && !v.approved) {
       warning = `${v.name} is not an approved vendor.`;
-    } else if (tightest && args.deliverBy && args.deliverBy > tightest) {
+    } else if (tightest && deliverBy && deliverBy > tightest) {
       warning = `Delivery lands after the ${prettyDate(tightest)} need-by date.`;
     }
 
@@ -171,8 +178,8 @@ export function buildCard(toolName: string, args: any): Card {
       subtotal: inr(subtotal),
       gst: `${inr(gst)} (${Math.round(GST_RATE * 100)}%)`,
       total: inr(subtotal + gst),
-      deliverBy: prettyDate(args.deliverBy),
-      floatDays: tightest && args.deliverBy ? dayGap(args.deliverBy, tightest) : undefined,
+      deliverBy: deliverBy ? prettyDate(deliverBy) : "Date not quoted",
+      floatDays: tightest && deliverBy ? dayGap(deliverBy, tightest) : undefined,
       deliverTo: PROJECT.site,
       neededFor: activities.length === 1 ? (activities[0] as string) : undefined,
       justification: args.justification ?? "",

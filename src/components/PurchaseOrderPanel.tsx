@@ -56,10 +56,11 @@ export default function PurchaseOrderPanel({
 
 function DocIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0 text-warn">
-      <rect x="3" y="3" width="18" height="18" rx="3" fill="currentColor" opacity="0.14" />
-      <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M3 9h18M9 9v12" stroke="currentColor" strokeWidth="1.8" />
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0 text-txt-dim">
+      {/* The document mark the sidebar uses for Purchase orders. */}
+      <path d="M6 3h8l4 4v14H6z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M14 3v4h4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

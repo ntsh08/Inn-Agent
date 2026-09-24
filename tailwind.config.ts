@@ -27,6 +27,12 @@ const config: Config = {
           ink: "#0D6B52",
         },
         shell: "#0E2B23",
+        // The Inncircles primary button: mint fill, dark label.
+        brand: {
+          DEFAULT: "#6FB9A9",
+          hover: "#60AD9C",
+          ink: "#202328",
+        },
         // The suite chrome above the app — its own surface, not the app palette.
         nav: {
           DEFAULT: "#122925",

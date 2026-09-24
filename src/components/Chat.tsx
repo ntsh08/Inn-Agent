@@ -36,7 +36,7 @@ type Bubble =
       kind: "card";
       id: string;
       card: Card;
-      decided?: "approve" | "reject";
+      decided?: "approve" | "reject" | "replaced";
       answers?: (string | null)[];
     }
   | { kind: "error"; text: string };
@@ -234,7 +234,18 @@ export default function Chat() {
       setFollowups([]);
       setInput("");
       setFiles([]);
-      setBubbles((b) => [...b, { kind: "user", text: t, at: Date.now() }]);
+      setBubbles((b) => [
+        // An open card the user typed past can no longer be acted on — the
+        // message they sent is the answer now.
+        ...b.map((x) =>
+          x.kind === "card" && !x.decided && !x.answers
+            ? x.card.kind === "questions"
+              ? { ...x, answers: x.card.questions.map(() => null) }
+              : { ...x, decided: "replaced" as const }
+            : x,
+        ),
+        { kind: "user", text: t, at: Date.now() },
+      ]);
       setHistory(next);
     };
 

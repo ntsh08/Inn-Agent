@@ -7,7 +7,7 @@ type Props = {
   onDecide: (decision: "approve" | "reject") => void;
   /** Opens the order beside the transcript. */
   onView: () => void;
-  decided?: "approve" | "reject";
+  decided?: "approve" | "reject" | "replaced";
 };
 
 export default function ApprovalCard({ card, onDecide, onView, decided }: Props) {
@@ -42,33 +42,40 @@ export default function ApprovalCard({ card, onDecide, onView, decided }: Props)
                 ? card.kind === "po"
                   ? "Raised"
                   : "Approved"
-                : "Cancelled"}
+                : decided === "replaced"
+                  ? "Replaced by your reply"
+                  : "Cancelled"}
             </span>
           ) : (
             <>
               <button
                 onClick={() => onDecide("approve")}
-                className="rounded-[6px] bg-accent px-3 py-[6px] text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover"
+                className="flex h-8 items-center rounded-[6px] bg-brand px-3 text-[12.5px] font-medium text-brand-ink transition-colors hover:bg-brand-hover"
               >
                 {card.kind === "po" ? "Raise purchase order" : "Approve"}
               </button>
-              <button
-                onClick={() => onDecide("reject")}
-                className="rounded-[6px] border border-line px-3 py-[6px] text-[12.5px] font-medium text-txt-dim transition-colors hover:bg-raised hover:text-txt"
-              >
-                {card.kind === "po" ? "Cancel" : "Reject"}
-              </button>
+              {/* No Cancel on a PO: it led nowhere — you still had to type what
+                  you wanted changed. Typing the change works without it, and
+                  an Edit action will replace it. */}
+              {card.kind !== "po" && (
+                <button
+                  onClick={() => onDecide("reject")}
+                  className="flex h-8 items-center rounded-[6px] border border-line px-3 text-[12.5px] font-medium text-txt-dim transition-colors hover:bg-raised hover:text-txt"
+                >
+                  Reject
+                </button>
+              )}
             </>
           )}
 
           {card.kind === "po" && (
             <button
               onClick={onView}
-              title="Open the purchase order"
-              className="ml-auto flex shrink-0 items-center gap-1.5 rounded-[6px] border border-line bg-bg px-2 py-[5px] text-[11.5px] tabular-nums text-txt-dim transition-colors hover:bg-raised hover:text-txt"
+              title={`Open ${card.reference}`}
+              className="ml-auto flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] border border-line bg-bg px-2.5 text-[11.5px] tabular-nums text-txt-dim transition-colors hover:bg-raised hover:text-txt"
             >
               <DocIcon />
-              {card.reference}
+              View PO
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-txt-faint">
                 <path d="M9 18l6-6-6-6" />
               </svg>
@@ -236,10 +243,11 @@ function Star() {
 
 function DocIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0 text-warn">
-      <rect x="3" y="3" width="18" height="18" rx="3" fill="currentColor" opacity="0.14" />
-      <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M3 9h18M9 9v12" stroke="currentColor" strokeWidth="1.8" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
+      {/* The document mark the sidebar uses for Purchase orders. */}
+      <path d="M6 3h8l4 4v14H6z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M14 3v4h4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

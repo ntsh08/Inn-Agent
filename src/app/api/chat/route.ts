@@ -92,6 +92,33 @@ export async function POST(req: NextRequest) {
       };
 
       try {
+        // ---- cards the user answered by typing instead ------------------------
+        // A card left open and then talked past still owes the model a reply
+        // to its tool call, or the API rejects the whole conversation. Fill it
+        // in, pointing the model at the message the user sent instead.
+        for (let i = messages.length - 2; i >= 0; i--) {
+          const m = messages[i];
+          if (m.role !== "assistant" || !m.tool_calls?.length) continue;
+          const answered = new Set(
+            messages.slice(i + 1).filter((x) => x.role === "tool").map((x) => x.tool_call_id),
+          );
+          const missing = m.tool_calls.filter((c: any) => !answered.has(c.id));
+          if (!missing.length) continue;
+          messages.splice(
+            i + 1,
+            0,
+            ...missing.map((c: any) => ({
+              role: "tool",
+              tool_call_id: c.id,
+              content: JSON.stringify({
+                ok: false,
+                superseded: true,
+                note: "The user did not use this card — they typed a message instead. Treat that message as their answer or the change they want. Nothing was raised.",
+              }),
+            })),
+          );
+        }
+
         // ---- resume: the previous turn stopped on an approval gate ----------
         const pending = messages[messages.length - 1];
         const resuming = pending?.role === "assistant" && !!pending.tool_calls?.length;

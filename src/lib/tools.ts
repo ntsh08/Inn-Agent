@@ -51,6 +51,56 @@ const obj = (props: Record<string, unknown>, required: string[] = []) => ({
   additionalProperties: false,
 });
 
+/**
+ * What people on site actually call each material. The catalogue says "Ready
+ * Mix Concrete (M30)"; the agent itself writes "RMC", and so do its follow-up
+ * suggestions — a search that only knew the catalogue name failed on them.
+ */
+const ALIASES: Record<string, string[]> = {
+  mat_opc53: ["opc", "cement"],
+  mat_tmt16: ["steel", "rebar", "rebars", "tmt", "saria", "sariya", "reinforcement", "fe500"],
+  mat_ply12: ["ply", "plywood", "shuttering", "formwork"],
+  mat_rmc30: ["rmc", "readymix", "ready mix", "concrete", "m30"],
+  mat_bwire: ["binding wire", "tie wire", "wire"],
+  mat_cover: ["cover block", "cover blocks", "spacer", "spacers"],
+};
+
+// Words that say nothing about which material is meant.
+const NOISE = new Set([
+  "the", "a", "an", "of", "for", "and", "by", "to", "on", "in", "our", "we",
+  "some", "grade", "mm", "bag", "bags", "cheapest", "vendor", "vendors",
+  "supplier", "suppliers", "delivery", "rate", "rates", "price", "quote", "quotes",
+]);
+
+const words = (text: string) =>
+  text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
+
+/**
+ * Any meaningful word in the query can match — the name, the spec, or a site
+ * alias — and the best match comes first. "M30 RMC", "rmc" and "ready mix"
+ * all land on the same item.
+ */
+function findMaterials(query: string) {
+  // A date's day number is not a spec — "by 18 Sept" matched "18 SWG" wire.
+  const undated = query.replace(
+    /\b\d{1,2}(st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/gi,
+    " ",
+  );
+  const q = words(undated).filter((w) => !NOISE.has(w));
+  const joined = ` ${q.join(" ")} `;
+
+  const scored = MATERIALS.map((m) => {
+    const own = new Set(words(`${m.name} ${m.spec}`));
+    const aliases = ALIASES[m.id] ?? [];
+    let score = q.filter((w) => own.has(w)).length;
+    for (const a of aliases) if (joined.includes(` ${a} `)) score += 2;
+    return { m, score };
+  }).filter((x) => x.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map(({ m }) => ({ materialId: m.id, name: m.name, spec: m.spec, unit: m.unit }));
+}
+
 export const TOOLS: ToolDef[] = [
   // ---------------------------------------------------------------- reads
   {
@@ -117,12 +167,7 @@ Call this before any tool that takes a materialId when all you have is a name th
       { query: { type: "string", description: 'Free text, e.g. "cement", "steel", "plywood".' } },
       ["query"],
     ),
-    run: ({ query }: { query: string }) => {
-      const q = query.toLowerCase();
-      return MATERIALS.filter(
-        (m) => m.name.toLowerCase().includes(q) || m.spec.toLowerCase().includes(q),
-      ).map((m) => ({ materialId: m.id, name: m.name, spec: m.spec, unit: m.unit }));
-    },
+    run: ({ query }: { query: string }) => findMaterials(query),
   },
   {
     name: "vendor_search",

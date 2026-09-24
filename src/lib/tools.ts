@@ -108,7 +108,6 @@ Use this when the user asks about a specific material's stock. For "what are we 
   },
   {
     name: "material_search",
-    source: SOURCES.catalogue,
     label: "Looking up the catalogue",
     short: "Checking catalogue",
     description: `Resolve a free-text material name to a catalogue item. Users say "cement" or "steel"; the catalogue holds "OPC 53 Grade" and "Fe 500D 16mm".
@@ -127,7 +126,6 @@ Call this before any tool that takes a materialId when all you have is a name th
   },
   {
     name: "vendor_search",
-    source: SOURCES.vendors,
     label: "Finding approved vendors",
     short: "Finding vendors",
     description: `List vendors who supply a given material.
@@ -148,7 +146,6 @@ Returns rating (out of 5) and on-time delivery percentage — both are relevant 
   },
   {
     name: "quote_compare",
-    source: SOURCES.quotes,
     label: "Comparing quotes",
     short: "Comparing quotes",
     description: `Side-by-side comparison of live vendor quotes for one material: rate per unit, lead time in days, minimum order quantity, and quote validity.

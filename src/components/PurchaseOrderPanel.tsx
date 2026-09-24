@@ -31,15 +31,6 @@ export default function PurchaseOrderPanel({
   return (
     <aside className="flex h-full w-[45%] min-w-[380px] max-w-[620px] shrink-0 flex-col border-l border-line bg-bg">
         <header className="flex shrink-0 items-center gap-2.5 border-b border-line-soft px-4 py-3">
-          <button
-            onClick={onClose}
-            aria-label="Back"
-            className="rounded-[5px] p-1 text-txt-faint transition-colors hover:bg-raised hover:text-txt-dim"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-          </button>
           <DocIcon />
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-txt">
             {card.reference}

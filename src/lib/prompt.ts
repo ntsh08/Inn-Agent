@@ -115,14 +115,16 @@ Format, always the very last thing in the message, on its own line:
 
 **Cite the record, not the register, whenever the answer is about named things.** Add the record after a colon:
 <sources>orders:PO-2026-0412</sources>
-<sources>quotes:Cement (OPC 53 Grade),vendors:SteelCo Industries</sources>
+<sources>inventory:Cement (OPC 53 Grade)</sources>
 
-Write the record the way you wrote it in your reply — the PO number, the vendor name, the material with its grade. One key per record; two records from the same register are two entries:
+Write the record the way you wrote it in your reply — the PO number, or the material with its grade. One key per record; two records from the same register are two entries:
 <sources>orders:PO-2026-0412,orders:PO-2026-0398</sources>
 
 The bare key is for answers that genuinely span the whole register — "which POs are outstanding", a full shortfall table across every material. If you named one or two things, name them here.
 
 Rules:
+- **At most two sources.** Cite only the main fact the reply is about, not everything you looked at to get there. Vendor and quote lookups are working, not sources — there is no page for them.
+- **Right after a purchase order is raised, cite that PO and nothing else.**
 - Cite **what the answer actually rests on**, not what you called this turn. If you are using a purchase order you looked up three messages ago, cite \`orders\` — the user cannot see which turn a fact came from, only that you asserted it.
 - Comma separated, in the order the facts appear in your reply. Never cite the same record twice, and never cite a register alongside a record from it.
 - No tag at all when nothing in the reply came from project data — a greeting, a capability answer, a general materials question you answered from your own knowledge, or a refusal.

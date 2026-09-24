@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, Fragment, useMemo } from "react";
 import { parseSources, type Source } from "@/lib/sources";
 import SourcePanel from "./SourcePanel";
-import { clockTime, timestampParts } from "@/lib/time";
+import { clockTime, dateLabel } from "@/lib/time";
 import { flushSync } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -41,19 +41,27 @@ type Bubble =
     }
   | { kind: "error"; text: string };
 
-// Four rows that between them describe the job: what the agent is, where the
-// gap is, how a buying decision gets made, and what is already on order. The
-// first spends a slot on orientation on purpose — a first-time visitor who
-// does not know what this is otherwise leaves without asking anything.
-// An hour of quiet is long enough that the next message reads as a fresh
-// sitting, and wants its own header. Below that, one header covers the lot.
-const GAP = 60 * 60 * 1000;
-
-const SUGGESTIONS = [
-  "What can you help me with?",
-  "What materials are we short on?",
-  "Compare cement rates before I order",
-  "Which POs are raised but not delivered?",
+// Each row wears the icon the sidebar uses for the section it asks about.
+const SUGGESTIONS: { text: string; icon: React.ReactNode }[] = [
+  {
+    text: "What materials are we short on?",
+    icon: (
+      <>
+        <path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z" />
+        <path d="M3.5 7.5L12 12m0 0l8.5-4.5M12 12v9" />
+      </>
+    ),
+  },
+  {
+    text: "Which POs are raised but not delivered?",
+    icon: (
+      <>
+        <path d="M6 3h8l4 4v14H6z" />
+        <path d="M14 3v4h4" />
+        <path d="M9 12h6M9 16h4" />
+      </>
+    ),
+  },
 ];
 
 /** The distinct places the most recent run of tools read from. */
@@ -371,15 +379,14 @@ export default function Chat() {
   const panelCard =
     panelBubble?.kind === "card" && panelBubble.card.kind === "po" ? panelBubble.card : null;
 
-  // Where a "Today 2:27 PM" line goes: above the first message, and again
-  // whenever enough time has passed that the reader would have lost the thread
-  // of when they were last here.
+  // Where a date header goes: above the first message, and again whenever the
+  // day changes.
   const marks = useMemo(() => {
     const out: (number | null)[] = bubbles.map(() => null);
     let previous: number | null = null;
     bubbles.forEach((b, i) => {
       if (b.kind !== "user" || b.at == null) return;
-      if (previous === null || b.at - previous > GAP) out[i] = b.at;
+      if (previous === null || dateLabel(b.at) !== dateLabel(previous)) out[i] = b.at;
       previous = b.at;
     });
     return out;
@@ -432,11 +439,13 @@ export default function Chat() {
           />
 
           <div className="flex shrink-0 items-center gap-1">
-            <IconButton label="New chat" onClick={reset}>
+            {/* Nothing to start over from until the first message is sent. */}
+            <IconButton label="New chat" onClick={reset} size={20} disabled={!started}>
               <path d="M12 5v14M5 12h14" />
             </IconButton>
             <IconButton
               label="Past chats"
+              size={18}
               active={historyOpen}
               onClick={() => {
                 setPanelId(null);
@@ -444,9 +453,8 @@ export default function Chat() {
                 setHistoryOpen((v) => !v);
               }}
             >
-              <path d="M3 3v6h6" />
-              <path d="M3.5 13a9 9 0 1 0 2.2-6.4L3 9" />
-              <path d="M12 7v5l3.5 2" />
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 7.5V12l3 2" />
             </IconButton>
           </div>
         </div>
@@ -467,6 +475,7 @@ export default function Chat() {
                   boxRef={box}
                   files={files}
                   setFiles={setFiles}
+                  placeholder="Ask anything or just say hi"
                 />
               }
             />
@@ -516,6 +525,7 @@ export default function Chat() {
                   boxRef={box}
                   files={files}
                   setFiles={setFiles}
+                  placeholder="Ask a follow-up"
                 />
           </div>
         </div>
@@ -647,9 +657,7 @@ function Sources({
             title={s.page}
             className="underline decoration-line underline-offset-2 transition-colors hover:text-txt-dim"
           >
-            {/* The register stays in front of a record so "PO-2026-0412"
-                still says which system it was read from. */}
-            {s.record ? `${s.label} / ${s.record}` : s.label}
+            {label(s)}
           </button>
         </span>
       ))}
@@ -748,23 +756,35 @@ function IconButton({
   label,
   onClick,
   active,
+  disabled,
+  size = 17,
   children,
 }: {
   label: string;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
+  /** Per icon, so glyphs that fill their box differently look the same size. */
+  size?: number;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
-      className={`flex h-7 w-7 items-center justify-center rounded-[6px] transition-colors ${
-        active ? "bg-raised text-txt" : "text-txt-faint hover:bg-raised hover:text-txt-dim"
+      // The faint grey read as disabled; these are live controls, so they take
+      // the same weight as the other icons in the app.
+      className={`flex h-8 w-8 items-center justify-center rounded-[6px] transition-colors ${
+        active
+          ? "bg-raised text-txt"
+          : "text-txt hover:bg-raised disabled:cursor-default disabled:text-txt-faint disabled:opacity-60 disabled:hover:bg-transparent"
       }`}
     >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      {/* Stroke is scaled against size so every icon draws the same 1.5px
+          line — a smaller icon at a fixed stroke looks thinner. */}
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={(1.5 * 24) / size} strokeLinecap="round" strokeLinejoin="round">
         {children}
       </svg>
     </button>
@@ -779,6 +799,7 @@ function Composer({
   boxRef,
   files,
   setFiles,
+  placeholder,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -787,6 +808,7 @@ function Composer({
   boxRef: React.RefObject<HTMLTextAreaElement>;
   files: File[];
   setFiles: (f: File[]) => void;
+  placeholder: string;
 }) {
   const picker = useRef<HTMLInputElement>(null);
 
@@ -829,7 +851,7 @@ function Composer({
           }
         }}
         rows={1}
-        placeholder="Ask about stock, rates or orders"
+        placeholder={placeholder}
         disabled={busy}
         className="max-h-40 w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-relaxed outline-none placeholder:text-txt-faint disabled:opacity-50"
         onInput={(e) => {
@@ -886,29 +908,34 @@ function Empty({ onPick, composer }: { onPick: (t: string) => void; composer: Re
       </h1>
       <div className="mt-5">{composer}</div>
 
-      <div className="mt-5 border-t border-line-soft">
+      {/* Open list, no rules between rows: prompts to pick from, not a
+          table to read. */}
+      <div className="mt-3 flex flex-col">
         {SUGGESTIONS.map((s) => (
           <button
-            key={s}
-            onClick={() => onPick(s)}
-            className="group flex w-full items-center gap-3 border-b border-line-soft py-3 text-left transition-colors hover:bg-raised/60"
+            key={s.text}
+            onClick={() => onPick(s.text)}
+            // Inset to match the prompt box, so each icon sits in line with
+            // where you type.
+            className="group flex items-center gap-3 rounded-[8px] px-3.5 py-2.5 text-left transition-colors hover:bg-raised"
           >
-            <span className="flex-1 text-[13px] text-txt-dim transition-colors group-hover:text-txt">
-              {s}
-            </span>
             <svg
-              width="14"
-              height="14"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="1.7"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="mr-1 shrink-0 text-txt-faint opacity-0 transition-opacity group-hover:opacity-100"
+              aria-hidden
+              className="shrink-0 text-txt-dim"
             >
-              <path d="M5 12h14M13 6l6 6-6 6" />
+              {s.icon}
             </svg>
+            <span className="text-[14.5px] text-txt">
+              {s.text}
+            </span>
           </button>
         ))}
       </div>
@@ -1005,13 +1032,31 @@ async function write(text: string) {
  */
 function FollowUps({ items, onPick }: { items: string[]; onPick: (t: string) => void }) {
   return (
-    <div className="animate-fade flex flex-wrap gap-2 pt-1">
-      {items.map((s) => (
+    <div className="animate-fade flex flex-col items-start gap-2 pt-1">
+      {/* Two at most — a short menu of next questions, not a summary. */}
+      {items.slice(0, 2).map((s) => (
         <button
           key={s}
           onClick={() => onPick(s)}
-          className="rounded-full border border-line px-3 py-[5px] text-[12.5px] text-txt-dim transition-colors hover:border-line hover:bg-raised hover:text-txt"
+          // Hover fills to the same grey as your own messages: this is what
+          // you would be saying.
+          className="flex items-center gap-1.5 rounded-full border border-line py-[5px] pl-2.5 pr-3 text-[12.5px] text-txt-dim transition-colors hover:border-transparent hover:bg-raised hover:text-txt"
         >
+          {/* The follow-up mark: this continues the conversation. */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+            className="shrink-0"
+          >
+            <path d="M6 6v6a3 3 0 0 0 3 3h10l-4-4m0 8 4-4" />
+          </svg>
           {s}
         </button>
       ))}
@@ -1022,16 +1067,20 @@ function FollowUps({ items, onPick }: { items: string[]; onPick: (t: string) => 
 /**
  * When this part of the conversation happened.
  *
- * Centred above the messages it introduces, the way a phone does it: the day
- * carries the weight, the clock trails it, and inside the hour there is no
- * clock at all — "12 min ago" is the more useful sentence.
+ * Centred above the messages it introduces, the way a phone does it. Just the
+ * day — each message carries its own time on hover.
  */
 function TimeMark({ at }: { at: number }) {
-  const { lead, time } = timestampParts(at);
   return (
-    <p className="pt-1 text-center text-[11.5px] text-txt-faint">
-      <span className="font-medium text-txt-dim">{lead}</span>
-      {time && <span> {time}</span>}
-    </p>
+    <p className="pt-1 text-center text-[11.5px] font-medium text-txt-dim">{dateLabel(at)}</p>
   );
+}
+
+/**
+ * How a citation reads. A PO number already says it is a purchase order, so
+ * it stands alone; a material keeps its register in front of it.
+ */
+function label(s: Source) {
+  if (!s.record) return s.label;
+  return s.page.startsWith("/orders/") ? s.record : `${s.label} / ${s.record}`;
 }

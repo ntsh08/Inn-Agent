@@ -53,6 +53,20 @@ export function dayLabel(at: number, now = Date.now()) {
   return timestampParts(at, now).lead;
 }
 
+/**
+ * The day only — "Today", or the date. For the header above a day's messages,
+ * where the clock belongs to each message, not to the day.
+ */
+export function dateLabel(at: number, now = Date.now()) {
+  const then = new Date(at);
+  if (sameDay(then, new Date(now))) return "Today";
+  return then.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(then.getFullYear() === new Date(now).getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
 /** Just the clock — for a message sitting under a separator that has the day. */
 export function clockTime(at: number) {
   return clock(new Date(at));

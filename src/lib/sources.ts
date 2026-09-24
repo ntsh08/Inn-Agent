@@ -13,11 +13,10 @@ export type Source = {
   record?: string;
 };
 
+// Only pages the app actually has. A citation that opens nothing a user can
+// find elsewhere in the product is not a source, it is a guess.
 export const SOURCES = {
   inventory: { label: "Inventory", page: "/inventory" },
-  catalogue: { label: "Material catalogue", page: "/catalogue" },
-  vendors: { label: "Approved vendors", page: "/vendors" },
-  quotes: { label: "Vendor quotes", page: "/quotes" },
   orders: { label: "Purchase orders", page: "/orders" },
 } as const satisfies Record<string, Source>;
 

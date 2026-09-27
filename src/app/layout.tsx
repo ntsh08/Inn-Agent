@@ -13,7 +13,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "INA Procure",
   description:
-    "A procurement agent: finds material shortfalls, compares approved vendors, and raises purchase orders for human approval.",
+    "A procurement agent: finds material shortfalls, compares vendors, and raises purchase orders for human approval.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -5,9 +5,9 @@ import type { Source } from "@/lib/sources";
 import { slug } from "@/lib/sources";
 import PurchaseOrderDoc from "./PurchaseOrderDoc";
 import { cardFromOrder } from "@/lib/cards";
+import { allOrders } from "@/lib/session-orders";
 import {
   MATERIALS,
-  PURCHASE_ORDERS,
   QUOTES,
   VENDORS,
   available,
@@ -42,17 +42,12 @@ export default function SourcePanel({
   return (
     <aside className="flex h-full w-[45%] min-w-[380px] max-w-[620px] shrink-0 flex-col border-l border-line bg-bg">
       <header className="flex shrink-0 items-center gap-2.5 border-b border-line-soft px-4 py-3">
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-txt">
-          {source.record && register === "orders" ? (
-            source.record
-          ) : (
-            <>
-              {source.label}
-              {source.record && <span className="text-txt-faint"> / {source.record}</span>}
-            </>
-          )}
+        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-txt">
+          {/* A PO by its number, a page by its name — the cited row is
+              highlighted in the list rather than spelled out up here. */}
+          {source.record && register === "orders" ? source.record : source.label}
         </span>
-        <span className="rounded-[4px] border border-line px-1.5 py-px text-[10px] text-txt-faint">
+        <span className="rounded-[4px] border border-line px-1.5 py-px text-[11px] text-txt-faint">
           Esc
         </span>
         <button
@@ -75,16 +70,16 @@ export default function SourcePanel({
 
 function Body({ register, record }: { register: string; record?: string }) {
   if (register === "orders") {
-    const po = record
-      ? PURCHASE_ORDERS.find((p) => slug(p.poNumber) === slug(record))
-      : null;
+    // Includes orders raised in chat this session, which only the browser holds.
+    const orders = allOrders();
+    const rows = record ? orders.filter((p) => slug(p.poNumber) === slug(record)) : [];
 
     // A cited order shows as the order, not as a row in a list.
-    if (po) return <PurchaseOrderDoc card={cardFromOrder(po)} issued />;
+    if (rows.length) return <PurchaseOrderDoc card={cardFromOrder(rows)} issued />;
 
     return (
       <Rows>
-        {PURCHASE_ORDERS.map((p) => (
+        {orders.map((p) => (
           <Row
             key={p.id}
             title={p.poNumber}
@@ -100,7 +95,8 @@ function Body({ register, record }: { register: string; record?: string }) {
     return (
       <Rows>
         {MATERIALS.map((m) => {
-          const gap = shortfall(m);
+          // Net of orders on the way, including ones raised this session.
+          const gap = shortfall(m, allOrders());
           return (
             <Row
               key={m.id}
@@ -119,7 +115,7 @@ function Body({ register, record }: { register: string; record?: string }) {
   if (register === "vendors") {
     return (
       <Rows>
-        {VENDORS.filter((v) => v.approved).map((v) => (
+        {VENDORS.map((v) => (
           <Row
             key={v.id}
             cited={!!record && slug(v.name) === slug(record)}
@@ -155,7 +151,7 @@ function Body({ register, record }: { register: string; record?: string }) {
     );
   }
 
-  return <p className="px-4 py-4 text-[12.5px] text-txt-faint">Nothing to show here.</p>;
+  return <p className="px-4 py-4 text-[12px] text-txt-faint">Nothing to show here.</p>;
 }
 
 function Rows({ children }: { children: React.ReactNode }) {
@@ -183,8 +179,8 @@ function Row({
       }`}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] text-txt">{title}</p>
-        {note && <p className="mt-0.5 text-[11.5px] text-txt-faint">{note}</p>}
+        <p className="text-[14px] text-txt">{title}</p>
+        {note && <p className="mt-0.5 text-[12px] text-txt-faint">{note}</p>}
       </div>
       {value && (
         <span

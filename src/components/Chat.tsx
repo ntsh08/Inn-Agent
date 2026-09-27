@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, Fragment, useMemo } from "react";
-import { parseSources, type Source } from "@/lib/sources";
+import { Children, useEffect, useRef, useState, Fragment, useMemo } from "react";
+import { SOURCES, parseSources, slug, type Source } from "@/lib/sources";
 import SourcePanel from "./SourcePanel";
+import { addSessionOrders, loadSessionOrders } from "@/lib/session-orders";
+import { STARTER_SUGGESTIONS, isSmallTalk } from "@/lib/smalltalk";
 import { clockTime, dateLabel } from "@/lib/time";
 import { flushSync } from "react-dom";
 import ReactMarkdown from "react-markdown";
@@ -30,7 +32,7 @@ type Bubble =
   | { kind: "agent"; text: string; sources?: Source[] }
   | {
       kind: "tools";
-      items: { id: string; label: string; short: string; source?: Source; done: boolean }[];
+      items: { id: string; name?: string; label: string; short: string; source?: Source; done: boolean }[];
     }
   | {
       kind: "card";
@@ -77,6 +79,36 @@ function sourcesBehind(bubbles: Bubble[]): Source[] | undefined {
   return undefined;
 }
 
+/** The tools behind the reply, looking past earlier text and cards. */
+function toolsBehind(bubbles: Bubble[]): string[] {
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    // A skipped or answered question card can sit between the lookup and the reply.
+    if (b.kind === "agent" || b.kind === "card") continue;
+    return b.kind === "tools" ? b.items.map((t) => t.name ?? "") : [];
+  }
+  return [];
+}
+
+/**
+ * True when the reply follows a vendor or quote lookup. There is no page for
+ * vendors, so a vendor pick cites nothing — the model tends to reach for the
+ * inventory row instead, which points at the wrong thing.
+ */
+function followsVendorLookup(bubbles: Bubble[]): boolean {
+  return toolsBehind(bubbles).some((n) => n === "quote_compare" || n === "vendor_search");
+}
+
+/**
+ * A shortfall table spans the whole inventory, so it cites the page rather
+ * than one row — the model kept citing whichever material it listed first.
+ */
+function wholeInventory(sources: Source[] | undefined, body: string, bubbles: Bubble[]) {
+  if (!sources || !toolsBehind(bubbles).includes("shortfall_report")) return sources;
+  if (!/\|\s*:?-{3,}/.test(body)) return sources;
+  return [SOURCES.inventory, ...sources.filter((s) => s.label !== SOURCES.inventory.label)];
+}
+
 export default function Chat() {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -96,9 +128,33 @@ export default function Chat() {
   const scroller = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
 
+  // Follow the conversation as it grows: a new message, streaming text, a new
+  // step. A card changing in place — raised, greyed — isn't growth; scrolling
+  // then pulled the card away as it was clicked. And while a raise animation
+  // plays, anything new waits until it's done, so the card holds still.
+  const seen = useRef<Bubble[]>([]);
+  const holdScrollUntil = useRef(0);
   useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+    const before = seen.current;
+    seen.current = bubbles;
+    const last = bubbles[bubbles.length - 1];
+    const grew =
+      bubbles.length > before.length || (!!last && last !== before[before.length - 1] && last.kind !== "card");
+    if (!grew) return;
+    const toEnd = () =>
+      scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+    const wait = holdScrollUntil.current - Date.now();
+    if (wait <= 0) return void toEnd();
+    const t = setTimeout(toEnd, wait);
+    return () => clearTimeout(t);
   }, [bubbles]);
+
+  // Follow-up suggestions land a second after the reply, so scroll again when
+  // they do — otherwise they sit hidden under the prompt box.
+  useEffect(() => {
+    if (!followups.length) return;
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+  }, [followups]);
 
   useEffect(() => {
     if (!busy) box.current?.focus();
@@ -108,12 +164,15 @@ export default function Chat() {
     setBusy(true);
     let acc = "";
     let textIndex = -1;
+    // POs raised in this run. The reply after them cites every one — left to
+    // the model it cited the first of three.
+    const raised: Source[] = [];
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages, decisions }),
+        body: JSON.stringify({ messages, decisions, orders: loadSessionOrders() }),
       });
 
       if (!res.ok) {
@@ -143,14 +202,18 @@ export default function Chat() {
             // facts it leaned on, including ones carried over from an earlier
             // turn. The tools that ran are the fallback for a reply that says
             // nothing, which is how this behaved before it was asked to.
-            const { body, sources: cited } = parseSources(acc);
+            const parsed = parseSources(acc);
+            const body = parsed.body;
+            const cited = raised.length ? raised : parsed.sources;
             setBubbles((b) => {
               const next = [...b];
               if (textIndex === -1 || next[textIndex]?.kind !== "agent") {
                 next.push({
                   kind: "agent",
                   text: body,
-                  sources: cited.length ? cited : sourcesBehind(next),
+                  sources: followsVendorLookup(next)
+                    ? undefined
+                    : wholeInventory(cited.length ? cited : sourcesBehind(next), body, next),
                 });
                 textIndex = next.length - 1;
               } else {
@@ -158,11 +221,13 @@ export default function Chat() {
                 next[textIndex] = {
                   kind: "agent",
                   text: body,
-                  sources: cited.length
-                    ? cited
-                    : prev.kind === "agent"
-                      ? prev.sources
-                      : undefined,
+                  sources: followsVendorLookup(next.slice(0, textIndex))
+                    ? undefined
+                    : wholeInventory(
+                        cited.length ? cited : prev.kind === "agent" ? prev.sources : undefined,
+                        body,
+                        next.slice(0, textIndex),
+                      ),
                 };
               }
               return next;
@@ -178,6 +243,7 @@ export default function Chat() {
               if (ev.status === "start") {
                 const item = {
                   id: ev.id,
+                  name: ev.name,
                   label: ev.label,
                   short: ev.short ?? ev.label,
                   source: ev.source,
@@ -204,6 +270,13 @@ export default function Chat() {
             });
           }
 
+          // The app's own line above the PO cards — no sources, it is not a reply.
+          if (ev.t === "note") {
+            acc = "";
+            textIndex = -1;
+            setBubbles((b) => [...b, { kind: "agent", text: ev.v }]);
+          }
+
           if (ev.t === "approval") {
             acc = "";
             textIndex = -1;
@@ -211,6 +284,14 @@ export default function Chat() {
           }
 
           if (ev.t === "state") setHistory(ev.messages);
+          if (ev.t === "orders") {
+            addSessionOrders(ev.orders);
+            // Raised on the way to answering something else: kept, not cited.
+            if (ev.quiet) continue;
+            for (const po of Array.from(new Set<string>(ev.orders.map((o: { poNumber: string }) => o.poNumber)))) {
+              raised.push({ ...SOURCES.orders, record: po, page: `${SOURCES.orders.page}/${slug(po)}` });
+            }
+          }
           if (ev.t === "error") setBubbles((b) => [...b, { kind: "error", text: ev.v }]);
         }
       }
@@ -226,6 +307,11 @@ export default function Chat() {
     if (!t || busy) return;
     const next = [...history, { role: "user", content: t }];
 
+    // POs raised on cards still waiting for the rest of their batch. Typing
+    // now still raises them — the button was pressed — and drops only the
+    // cards left open.
+    const raisedFirst = Object.keys(decisions.current).length ? decisions.current : undefined;
+
     // The opening message names the chat, in the header and in history.
     if (!title) nameChat(t);
 
@@ -234,13 +320,14 @@ export default function Chat() {
       setFollowups([]);
       setInput("");
       setFiles([]);
+      decisions.current = {};
       setBubbles((b) => [
         // An open card the user typed past can no longer be acted on — the
         // message they sent is the answer now.
         ...b.map((x) =>
           x.kind === "card" && !x.decided && !x.answers
             ? x.card.kind === "questions"
-              ? { ...x, answers: x.card.questions.map(() => null) }
+              ? { ...x, answers: x.card.questions.map(() => null), decided: "replaced" as const }
               : { ...x, decided: "replaced" as const }
             : x,
         ),
@@ -277,7 +364,7 @@ export default function Chat() {
       transition.updateCallbackDone?.catch(() => {});
     } else {
       commit();
-      run(next);
+      run(next, raisedFirst);
     }
   }
 
@@ -298,22 +385,45 @@ export default function Chat() {
     }
   }
 
+  /**
+   * Several cards can come in one turn — one PO per vendor. The turn resumes
+   * only once every one of them is decided; resuming on the first would send
+   * the rest as rejected.
+   */
+  const decisions = useRef<Record<string, string>>({});
+
+  function settle(id: string, value: string, mark: (x: Bubble & { kind: "card" }) => Bubble) {
+    decisions.current[id] = value;
+    const next = bubbles.map((x) => (x.kind === "card" && x.id === id ? mark(x) : x));
+    setBubbles(next);
+    const open = next.some((x) => x.kind === "card" && !x.decided && !x.answers);
+    if (open) return;
+    const all = decisions.current;
+    decisions.current = {};
+    run(history, all);
+  }
+
   function decide(id: string, decision: "approve" | "reject") {
-    setBubbles((b) =>
-      b.map((x) => (x.kind === "card" && x.id === id ? { ...x, decided: decision } : x)),
-    );
-    run(history, { [id]: decision });
+    // The raise animation runs about two seconds; the view stays put for it.
+    if (decision === "approve") holdScrollUntil.current = Date.now() + 2000;
+    settle(id, decision, (x) => ({ ...x, decided: decision }));
   }
 
   function answer(id: string, questions: { question: string }[], picked: (string | null)[]) {
-    setBubbles((b) =>
-      b.map((x) => (x.kind === "card" && x.id === id ? { ...x, answers: picked } : x)),
+    // Skip closes the question and stops there: nothing runs, and the
+    // composer opens for whatever the user wants instead. (It used to carry
+    // on with a vendor comparison, which read as the agent ignoring Skip.)
+    if (picked.every((p) => p == null)) {
+      setBubbles((b) =>
+        b.map((x) => (x.kind === "card" && x.id === id ? { ...x, answers: picked } : x)),
+      );
+      return;
+    }
+    settle(
+      id,
+      JSON.stringify(questions.map((q, i) => ({ question: q.question, answer: picked[i] }))),
+      (x) => ({ ...x, answers: picked }),
     );
-    run(history, {
-      [id]: JSON.stringify(
-        questions.map((q, i) => ({ question: q.question, answer: picked[i] })),
-      ),
-    });
   }
 
   /** Past chats outlive a reload; the live one is only in memory. */
@@ -404,6 +514,9 @@ export default function Chat() {
   }, [bubbles]);
 
   const last = bubbles[bubbles.length - 1];
+  const questionOpen = bubbles.some(
+    (b) => b.kind === "card" && b.card.kind === "questions" && !b.answers && !b.decided,
+  );
   const showThinking = busy && last?.kind !== "tools" && last?.kind !== "agent";
 
   // Suggestions belong to a finished turn. A card still waiting on the user is
@@ -416,6 +529,13 @@ export default function Chat() {
 
     const agentText = last?.kind === "agent" ? last.text : "";
     const userText = [...bubbles].reverse().find((b) => b.kind === "user");
+
+    // After a greeting there is nothing specific to follow up on yet, so the
+    // two broadest ways in — fixed, instant, always relevant.
+    if (userText?.kind === "user" && isSmallTalk(userText.text)) {
+      setFollowups(STARTER_SUGGESTIONS);
+      return;
+    }
 
     const controller = new AbortController();
     fetch("/api/followups", {
@@ -446,7 +566,7 @@ export default function Chat() {
         <div className="mx-auto flex h-12 max-w-col items-center gap-3 px-6">
           <Typewriter
             text={title ?? "New chat"}
-            className="min-w-0 flex-1 truncate text-[15px] font-medium text-txt"
+            className="min-w-0 flex-1 truncate text-[16px] font-medium text-txt"
           />
 
           <div className="flex shrink-0 items-center gap-1">
@@ -537,6 +657,9 @@ export default function Chat() {
                   files={files}
                   setFiles={setFiles}
                   placeholder="Ask a follow-up"
+                  // A question card has its own answer box, so this one waits
+                  // until the card is answered or skipped.
+                  locked={questionOpen ? "Pick an option above, or type in Something else" : undefined}
                 />
           </div>
         </div>
@@ -596,8 +719,8 @@ function Row({
         <QuestionCard
           questions={questions}
           answers={b.answers}
+          replaced={b.decided === "replaced"}
           onSubmit={(picked) => onAnswer(b.id, questions, picked)}
-          onDismiss={() => onDecide(b.id, "reject")}
         />
       );
     }
@@ -613,7 +736,7 @@ function Row({
 
   if (b.kind === "error") {
     return (
-      <div className="rounded-[8px] border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-[12.5px] text-danger">
+      <div className="rounded-[8px] border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-[14px] text-danger">
         {b.text}
       </div>
     );
@@ -632,6 +755,31 @@ function Row({
               <div className="table-wrap">
                 <table {...props} />
               </div>
+            );
+          },
+          // The recommended vendor's star: always after the name, in yellow,
+          // wherever the model put it.
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          td({ node, children, ...props }) {
+            const kids = Children.toArray(children);
+            if (!kids.some((k) => typeof k === "string" && k.includes("★"))) {
+              return <td {...props}>{children}</td>;
+            }
+            const last = kids.length - 1;
+            const clean = kids.map((k, i) => {
+              if (typeof k !== "string") return k;
+              let t = k.replace(/\s*★\s*/g, " ");
+              if (i === 0) t = t.trimStart();
+              if (i === last) t = t.trimEnd();
+              return t;
+            });
+            return (
+              <td {...props}>
+                {clean}
+                <span role="img" aria-label="Recommended" className="ml-1.5 text-star">
+                  ★
+                </span>
+              </td>
             );
           },
         }}
@@ -653,10 +801,12 @@ function Sources({
   sources: Source[];
   onOpen: (s: Source) => void;
 }) {
+  // Two inventory rows cited both read "Inventory" — show it once.
+  const shown = sources.filter((s, i) => sources.findIndex((t) => label(t) === label(s)) === i);
   return (
-    <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-txt-faint">
-      <span>{sources.length > 1 ? "Sources" : "Source"}</span>
-      {sources.map((s, i) => (
+    <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-txt-faint">
+      <span>{shown.length > 1 ? "Sources" : "Source"}</span>
+      {shown.map((s, i) => (
         <span key={s.page} className="flex items-center gap-2">
           {i > 0 && <span aria-hidden>·</span>}
           {/* The path is the link target, not something to read — printing it
@@ -811,6 +961,7 @@ function Composer({
   files,
   setFiles,
   placeholder,
+  locked,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -820,12 +971,14 @@ function Composer({
   files: File[];
   setFiles: (f: File[]) => void;
   placeholder: string;
+  /** Why typing is paused, shown in place of the placeholder. */
+  locked?: string;
 }) {
   const picker = useRef<HTMLInputElement>(null);
 
   return (
     <div
-      className="rounded-[10px] border border-line bg-bg shadow-input"
+      className={`rounded-[10px] border border-line shadow-input ${locked ? "bg-raised" : "bg-bg"}`}
       style={{ viewTransitionName: "composer" }}
     >
       {files.length > 0 && (
@@ -833,7 +986,7 @@ function Composer({
           {files.map((f, i) => (
             <span
               key={f.name + i}
-              className="flex max-w-[220px] items-center gap-1.5 rounded-[6px] border border-line bg-surface py-1 pl-2 pr-1 text-[11.5px] text-txt-dim"
+              className="flex max-w-[220px] items-center gap-1.5 rounded-[6px] border border-line bg-surface py-1 pl-2 pr-1 text-[12px] text-txt-dim"
             >
               <Paperclip size={11} />
               <span className="min-w-0 flex-1 truncate">{f.name}</span>
@@ -862,9 +1015,12 @@ function Composer({
           }
         }}
         rows={1}
-        placeholder={placeholder}
-        disabled={busy}
-        className="max-h-40 w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-relaxed outline-none placeholder:text-txt-faint disabled:opacity-50"
+        placeholder={locked ?? placeholder}
+        disabled={busy || !!locked}
+        // Locked keeps its hint readable; only a busy composer fades.
+        className={`max-h-40 w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[14px] leading-relaxed outline-none placeholder:text-txt-faint ${
+          locked ? "cursor-not-allowed" : "disabled:opacity-50"
+        }`}
         onInput={(e) => {
           const el = e.currentTarget;
           el.style.height = "auto";
@@ -886,7 +1042,7 @@ function Composer({
         />
         <button
           onClick={() => picker.current?.click()}
-          disabled={busy}
+          disabled={busy || !!locked}
           aria-label="Attach images or files"
           title="Attach images or files"
           className="flex h-6 w-6 items-center justify-center rounded-[5px] text-txt-faint transition-colors hover:bg-raised hover:text-txt-dim disabled:opacity-40 disabled:hover:bg-transparent"
@@ -896,7 +1052,7 @@ function Composer({
 
         <button
           onClick={() => send(input)}
-          disabled={busy || !input.trim()}
+          disabled={busy || !!locked || !input.trim()}
           aria-label="Send"
           className="flex h-6 w-6 items-center justify-center rounded-[5px] bg-accent text-white transition-colors hover:bg-accent-hover disabled:bg-raised disabled:text-txt-faint"
         >
@@ -913,7 +1069,7 @@ function Empty({ onPick, composer }: { onPick: (t: string) => void; composer: Re
   return (
     // Centred while the screen is empty; the composer moves to the foot of
     // the page the moment there is a transcript to sit under.
-    <div className="flex min-h-[calc(100dvh-96px)] flex-col justify-center py-10">
+    <div className="flex min-h-[calc(100dvh-96px)] flex-col justify-center pb-[136px] pt-10">
       <h1 className="text-center text-[32px] font-normal tracking-[-0.02em] text-txt">
         Hi {USER.firstName}, what are we buying?
       </h1>
@@ -944,7 +1100,7 @@ function Empty({ onPick, composer }: { onPick: (t: string) => void; composer: Re
             >
               {s.icon}
             </svg>
-            <span className="text-[14.5px] text-txt">
+            <span className="text-[14px] text-txt">
               {s.text}
             </span>
           </button>
@@ -975,7 +1131,7 @@ function UserBubble({ text, at }: { text: string; at?: number }) {
 
   return (
     <div className="animate-rise group flex flex-col items-end">
-      <div className="max-w-[80%] rounded-[10px] border border-line-soft bg-raised px-3.5 py-2 text-[13.5px] leading-relaxed text-txt">
+      <div className="max-w-[80%] rounded-[10px] border border-line-soft bg-raised px-3.5 py-2 text-[14px] leading-relaxed text-txt">
         {text}
       </div>
 
@@ -1051,7 +1207,7 @@ function FollowUps({ items, onPick }: { items: string[]; onPick: (t: string) => 
           onClick={() => onPick(s)}
           // Hover fills to the same grey as your own messages: this is what
           // you would be saying.
-          className="flex items-center gap-1.5 rounded-full border border-line py-[5px] pl-2.5 pr-3 text-[12.5px] text-txt-dim transition-colors hover:border-transparent hover:bg-raised hover:text-txt"
+          className="flex items-center gap-1.5 rounded-full border border-line py-[5px] pl-2.5 pr-3 text-[14px] text-txt-dim transition-colors hover:border-transparent hover:bg-raised hover:text-txt"
         >
           {/* The follow-up mark: this continues the conversation. */}
           <svg
@@ -1083,7 +1239,7 @@ function FollowUps({ items, onPick }: { items: string[]; onPick: (t: string) => 
  */
 function TimeMark({ at }: { at: number }) {
   return (
-    <p className="pt-1 text-center text-[11.5px] font-medium text-txt-dim">{dateLabel(at)}</p>
+    <p className="pt-1 text-center text-[12px] font-medium text-txt-dim">{dateLabel(at)}</p>
   );
 }
 
@@ -1091,7 +1247,7 @@ function TimeMark({ at }: { at: number }) {
  * How a citation reads. A PO number already says it is a purchase order, so
  * it stands alone; a material keeps its register in front of it.
  */
+/** A PO is named by its number; anything else by its page — "Inventory". */
 function label(s: Source) {
-  if (!s.record) return s.label;
-  return s.page.startsWith("/orders/") ? s.record : `${s.label} / ${s.record}`;
+  return s.record && s.page.startsWith("/orders/") ? s.record : s.label;
 }

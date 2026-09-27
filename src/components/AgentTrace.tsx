@@ -41,7 +41,7 @@ export default function AgentTrace({
   const expanded = canExpand && open;
 
   return (
-    <div className="flex flex-col [--orb-fg:#128766] [--shimmer-ink-soft:rgba(138,145,144,0.35)] [--shimmer-ink:#8A9190]">
+    <div className="flex flex-col [--orb-fg:#128766] [--shimmer-ink-soft:rgba(107,114,113,0.35)] [--shimmer-ink:#6B7271]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -62,7 +62,7 @@ export default function AgentTrace({
           {working ? (
             <ThinkingState>{heading}</ThinkingState>
           ) : (
-            <span className="animate-rise text-[12.5px] font-medium text-txt-faint">
+            <span className="animate-rise text-[12px] font-medium text-txt-faint">
               {heading}
             </span>
           )}
@@ -102,7 +102,7 @@ export default function AgentTrace({
                 <div key={t.id} className="animate-rise flex min-h-[26px] items-center gap-2">
                   {t.done ? <Check /> : <Spinner />}
                   <span
-                    className={`text-[12.5px] ${t.done ? "text-txt-faint" : "text-txt-dim"}`}
+                    className={`text-[12px] ${t.done ? "text-txt-faint" : "text-txt-dim"}`}
                   >
                     {t.label}
                   </span>

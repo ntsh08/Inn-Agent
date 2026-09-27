@@ -18,7 +18,8 @@ const config: Config = {
         txt: {
           DEFAULT: "#141A18",
           dim: "#4D5454",
-          faint: "#8A9190",
+          // #8A9190 read at 3.2:1 on white, under the 4.5:1 accessibility minimum.
+          faint: "#6B7271",
         },
         accent: {
           DEFAULT: "#128766",
@@ -43,6 +44,8 @@ const config: Config = {
         danger: "#C8372D",
         warn: "#A66A11",
         good: "#128766",
+        // The recommended vendor's star in a comparison table.
+        star: "#F5A623",
       },
       maxWidth: { col: "720px" },
       boxShadow: {

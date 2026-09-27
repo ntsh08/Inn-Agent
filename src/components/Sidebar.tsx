@@ -171,7 +171,7 @@ export default function Sidebar() {
             {/* Kept mounted and clipped, so the label slides out of the icon
                 rather than popping in once the width animation has finished. */}
             <span
-              className={`overflow-hidden whitespace-nowrap text-[13px] transition-opacity duration-150 ${
+              className={`overflow-hidden whitespace-nowrap text-[14px] transition-opacity duration-150 ${
                 open ? "opacity-100" : "w-0 opacity-0"
               } ${active ? "font-medium" : ""}`}
             >

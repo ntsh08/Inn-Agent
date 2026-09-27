@@ -56,7 +56,7 @@ function Account() {
   return (
     <span
       title={USER.firstName}
-      className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 text-[11.5px] font-medium text-white ring-1 ring-white/20"
+      className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 text-[12px] font-medium text-white ring-1 ring-white/20"
     >
       {USER.avatar ? (
         // eslint-disable-next-line @next/next/no-img-element

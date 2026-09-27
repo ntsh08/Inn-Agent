@@ -43,7 +43,7 @@ export const MATERIALS: Material[] = [
     inStock: 160,
     reserved: 0,
     required: 800,
-    neededBy: "2026-09-18",
+    neededBy: "2026-09-25",
     activity: "Tower 1 — Level 4 slab pour",
   },
   {
@@ -54,7 +54,7 @@ export const MATERIALS: Material[] = [
     inStock: 3.2,
     reserved: 0,
     required: 24,
-    neededBy: "2026-09-22",
+    neededBy: "2026-09-28",
     activity: "Tower 1 — Level 4 reinforcement",
   },
   {
@@ -65,7 +65,7 @@ export const MATERIALS: Material[] = [
     inStock: 95,
     reserved: 20,
     required: 120,
-    neededBy: "2026-09-20",
+    neededBy: "2026-09-27",
     activity: "Tower 1 — Level 4 formwork",
   },
   {
@@ -76,7 +76,7 @@ export const MATERIALS: Material[] = [
     inStock: 0,
     reserved: 0,
     required: 180,
-    neededBy: "2026-09-18",
+    neededBy: "2026-09-26",
     activity: "Tower 1 — Level 4 slab pour",
   },
   {
@@ -87,7 +87,7 @@ export const MATERIALS: Material[] = [
     inStock: 420,
     reserved: 0,
     required: 400,
-    neededBy: "2026-09-22",
+    neededBy: "2026-09-28",
     activity: "Tower 1 — Level 4 reinforcement",
   },
   {
@@ -98,7 +98,7 @@ export const MATERIALS: Material[] = [
     inStock: 6000,
     reserved: 500,
     required: 4500,
-    neededBy: "2026-09-20",
+    neededBy: "2026-09-27",
     activity: "Tower 1 — Level 4 reinforcement",
   },
 ];
@@ -106,7 +106,6 @@ export const MATERIALS: Material[] = [
 export type Vendor = {
   id: string;
   name: string;
-  approved: boolean;
   rating: number;
   onTimePct: number;
   location: string;
@@ -117,16 +116,14 @@ export const VENDORS: Vendor[] = [
   {
     id: "ven_acme",
     name: "Acme Building Materials",
-    approved: true,
     rating: 4.6,
     onTimePct: 94,
     location: "Hyderabad",
-    supplies: ["mat_opc53", "mat_ply12", "mat_bwire"],
+    supplies: ["mat_opc53", "mat_ply12", "mat_rmc30", "mat_bwire", "mat_cover"],
   },
   {
     id: "ven_deccan",
     name: "Deccan Cements Ltd",
-    approved: true,
     rating: 4.2,
     onTimePct: 81,
     location: "Nalgonda",
@@ -135,38 +132,26 @@ export const VENDORS: Vendor[] = [
   {
     id: "ven_ganesh",
     name: "Sri Ganesh Traders",
-    approved: true,
     rating: 4.8,
     onTimePct: 97,
     location: "Hyderabad",
-    supplies: ["mat_opc53", "mat_bwire", "mat_cover"],
+    supplies: ["mat_opc53", "mat_ply12", "mat_bwire", "mat_cover"],
   },
   {
     id: "ven_steelco",
     name: "SteelCo Industries",
-    approved: true,
     rating: 4.5,
     onTimePct: 89,
     location: "Vijayawada",
-    supplies: ["mat_tmt16"],
+    supplies: ["mat_tmt16", "mat_bwire"],
   },
   {
     id: "ven_bharat",
     name: "Bharat Steel & Alloys",
-    approved: true,
     rating: 4.1,
     onTimePct: 76,
     location: "Raipur",
     supplies: ["mat_tmt16"],
-  },
-  {
-    id: "ven_lowcost",
-    name: "Value Traders",
-    approved: false,
-    rating: 3.4,
-    onTimePct: 62,
-    location: "Hyderabad",
-    supplies: ["mat_opc53", "mat_ply12"],
   },
 ];
 
@@ -181,29 +166,19 @@ export type Quote = {
 
 /** Live quotes, keyed by material. Rate is per unit, in INR. */
 export const QUOTES: Quote[] = [
-  { vendorId: "ven_acme", materialId: "mat_opc53", rate: 395, leadDays: 3, moq: 100, validTill: "2026-09-25" },
+  { vendorId: "ven_acme", materialId: "mat_opc53", rate: 395, leadDays: 3, moq: 100, validTill: "2026-09-30" },
   { vendorId: "ven_deccan", materialId: "mat_opc53", rate: 372, leadDays: 8, moq: 500, validTill: "2026-09-30" },
-  { vendorId: "ven_ganesh", materialId: "mat_opc53", rate: 408, leadDays: 2, moq: 50, validTill: "2026-09-20" },
-  { vendorId: "ven_steelco", materialId: "mat_tmt16", rate: 62400, leadDays: 6, moq: 5, validTill: "2026-09-28" },
+  { vendorId: "ven_ganesh", materialId: "mat_opc53", rate: 408, leadDays: 2, moq: 50, validTill: "2026-09-30" },
+  { vendorId: "ven_steelco", materialId: "mat_tmt16", rate: 62400, leadDays: 6, moq: 5, validTill: "2026-09-30" },
   { vendorId: "ven_bharat", materialId: "mat_tmt16", rate: 59800, leadDays: 11, moq: 10, validTill: "2026-09-30" },
-  { vendorId: "ven_acme", materialId: "mat_ply12", rate: 1850, leadDays: 4, moq: 25, validTill: "2026-09-26" },
-  { vendorId: "ven_deccan", materialId: "mat_rmc30", rate: 5200, leadDays: 2, moq: 30, validTill: "2026-09-22" },
-];
-
-export type RateHistoryEntry = {
-  materialId: string;
-  vendorId: string;
-  rate: number;
-  orderedOn: string;
-  qty: number;
-};
-
-export const RATE_HISTORY: RateHistoryEntry[] = [
-  { materialId: "mat_opc53", vendorId: "ven_acme", rate: 388, orderedOn: "2026-08-12", qty: 600 },
-  { materialId: "mat_opc53", vendorId: "ven_acme", rate: 381, orderedOn: "2026-07-04", qty: 450 },
-  { materialId: "mat_opc53", vendorId: "ven_ganesh", rate: 402, orderedOn: "2026-06-19", qty: 200 },
-  { materialId: "mat_tmt16", vendorId: "ven_steelco", rate: 61200, orderedOn: "2026-08-02", qty: 18 },
-  { materialId: "mat_ply12", vendorId: "ven_acme", rate: 1790, orderedOn: "2026-07-28", qty: 80 },
+  { vendorId: "ven_acme", materialId: "mat_ply12", rate: 1850, leadDays: 4, moq: 25, validTill: "2026-09-30" },
+  { vendorId: "ven_ganesh", materialId: "mat_ply12", rate: 1790, leadDays: 6, moq: 20, validTill: "2026-09-30" },
+  { vendorId: "ven_deccan", materialId: "mat_rmc30", rate: 5200, leadDays: 2, moq: 30, validTill: "2026-09-30" },
+  { vendorId: "ven_acme", materialId: "mat_rmc30", rate: 5350, leadDays: 3, moq: 20, validTill: "2026-09-30" },
+  { vendorId: "ven_steelco", materialId: "mat_bwire", rate: 78, leadDays: 6, moq: 100, validTill: "2026-09-30" },
+  { vendorId: "ven_ganesh", materialId: "mat_bwire", rate: 80, leadDays: 2, moq: 50, validTill: "2026-09-30" },
+  { vendorId: "ven_ganesh", materialId: "mat_cover", rate: 4, leadDays: 2, moq: 500, validTill: "2026-09-30" },
+  { vendorId: "ven_acme", materialId: "mat_cover", rate: 4.2, leadDays: 3, moq: 1000, validTill: "2026-09-30" },
 ];
 
 export type PurchaseOrder = {
@@ -218,33 +193,54 @@ export type PurchaseOrder = {
   expectedOn: string;
 };
 
-/** Seeded with a couple of live orders so po_search has something to return. */
+/**
+ * Orders already on this project. One PO is one row per material — they
+ * share the PO number — because nobody raises a purchase order for a single
+ * item. Only materials from the inventory list appear here.
+ */
+const po = (
+  id: string, poNumber: string, vendorId: string, materialId: string, qty: number, rate: number,
+  status: PurchaseOrder["status"], raisedOn: string, expectedOn: string,
+): PurchaseOrder => ({ id, poNumber, vendorId, materialId, qty, rate, status, raisedOn, expectedOn });
+
 export const PURCHASE_ORDERS: PurchaseOrder[] = [
-  {
-    id: "po_1",
-    poNumber: "PO-2026-0412",
-    vendorId: "ven_steelco",
-    materialId: "mat_tmt16",
-    qty: 18,
-    rate: 61200,
-    status: "In Transit",
-    raisedOn: "2026-09-04",
-    expectedOn: "2026-09-15",
-  },
-  {
-    id: "po_2",
-    poNumber: "PO-2026-0398",
-    vendorId: "ven_acme",
-    materialId: "mat_ply12",
-    qty: 80,
-    rate: 1790,
-    status: "Delivered",
-    raisedOn: "2026-08-24",
-    expectedOn: "2026-08-30",
-  },
+  // Steel for the Level 4 reinforcement, still on the way.
+  po("po_1", "PO-2026-0412", "ven_steelco", "mat_tmt16", 18, 61200, "In Transit", "2026-09-04", "2026-09-15"),
+  po("po_2", "PO-2026-0412", "ven_steelco", "mat_bwire", 200, 76, "In Transit", "2026-09-04", "2026-09-15"),
+  // Formwork materials, delivered.
+  po("po_3", "PO-2026-0398", "ven_acme", "mat_ply12", 80, 1790, "Delivered", "2026-08-24", "2026-08-30"),
+  po("po_4", "PO-2026-0398", "ven_acme", "mat_bwire", 300, 78, "Delivered", "2026-08-24", "2026-08-30"),
+  po("po_5", "PO-2026-0398", "ven_acme", "mat_cover", 3000, 4, "Delivered", "2026-08-24", "2026-08-30"),
+  // The last cement order — the ₹388 a bag the agent compares new quotes against.
+  po("po_6", "PO-2026-0401", "ven_acme", "mat_opc53", 500, 388, "Delivered", "2026-08-12", "2026-08-14"),
+  po("po_7", "PO-2026-0401", "ven_acme", "mat_cover", 2500, 4, "Delivered", "2026-08-12", "2026-08-14"),
 ];
 
-export const GST_RATE = 0.28;
+/** The next PO number — one past the highest, however many items each PO holds. */
+export function nextPoNumber(orders: PurchaseOrder[] = PURCHASE_ORDERS) {
+  const top = Math.max(0, ...orders.map((o) => Number(o.poNumber.split("-").pop()) || 0));
+  return `PO-2026-${String(top + 1).padStart(4, "0")}`;
+}
+
+export const GST_RATE = 0.18;
+
+/**
+ * An order as it will be raised: today's quoted rate, and at least the
+ * vendor's minimum. Applied in code because the model reached for what we
+ * paid last time (₹61,200 steel against a ₹62,400 quote) and ordered below
+ * the minimum. Items without a live quote from that vendor are left as sent.
+ */
+export function asQuoted<T extends { vendorId: string; items?: { materialId: string; quantity: number; rate: number }[] }>(
+  order: T,
+): T {
+  return {
+    ...order,
+    items: (order.items ?? []).map((it) => {
+      const q = QUOTES.find((x) => x.vendorId === order.vendorId && x.materialId === it.materialId);
+      return q ? { ...it, rate: q.rate, quantity: Math.max(it.quantity, q.moq) } : it;
+    }),
+  };
+}
 
 export function materialById(id: string) {
   return MATERIALS.find((m) => m.id === id);
@@ -283,8 +279,28 @@ export function arrivalDate(vendorId: string, materialIds: string[]) {
 export function available(m: Material) {
   return m.inStock - m.reserved;
 }
-export function shortfall(m: Material) {
-  return Math.max(0, m.required - available(m));
+/**
+ * Ordered and not yet delivered. It counts toward covering a shortfall — the
+ * agent once ordered 20.8 t of steel with 18 t already on the way.
+ */
+export function inTransit(materialId: string, orders: PurchaseOrder[] = PURCHASE_ORDERS) {
+  return openOrders(materialId, orders).reduce((n, o) => n + o.qty, 0);
+}
+
+/** The orders behind inTransit — raised for this material, not yet delivered. */
+export function openOrders(materialId: string, orders: PurchaseOrder[] = PURCHASE_ORDERS) {
+  return orders.filter(
+    (o) => o.materialId === materialId && (o.status === "Issued" || o.status === "In Transit"),
+  );
+}
+
+/**
+ * What still needs ordering: required, less what's free on site, less what's
+ * on the way. The table reads left to right as exactly this sum.
+ */
+export function shortfall(m: Material, orders: PurchaseOrder[] = PURCHASE_ORDERS) {
+  const gap = m.required - available(m) - inTransit(m.id, orders);
+  return Math.max(0, Math.round(gap * 100) / 100);
 }
 export function daysUntil(dateStr: string) {
   const from = new Date(PROJECT.today).getTime();

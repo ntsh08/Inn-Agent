@@ -32,10 +32,10 @@ export default function PurchaseOrderPanel({
     <aside className="flex h-full w-[45%] min-w-[380px] max-w-[620px] shrink-0 flex-col border-l border-line bg-bg">
         <header className="flex shrink-0 items-center gap-2.5 border-b border-line-soft px-4 py-3">
           <DocIcon />
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-txt">
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-txt">
             {card.reference}
           </span>
-          <span className="rounded-[4px] border border-line px-1.5 py-px text-[10px] text-txt-faint">
+          <span className="rounded-[4px] border border-line px-1.5 py-px text-[11px] text-txt-faint">
             Esc
           </span>
           <button

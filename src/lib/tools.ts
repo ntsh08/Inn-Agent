@@ -14,16 +14,18 @@ import {
   GST_RATE,
   MATERIALS,
   PROJECT,
-  PURCHASE_ORDERS,
   QUOTES,
-  RATE_HISTORY,
   VENDORS,
   arrivalDate,
   available,
   daysUntil,
+  inTransit,
   materialById,
+  nextPoNumber,
+  openOrders,
   shortfall,
   vendorById,
+  type PurchaseOrder,
 } from "./data";
 import { SKILLS, SKILL_BY_NAME } from "./skills";
 import { SOURCES, type Source } from "./sources";
@@ -41,8 +43,24 @@ export type ToolDef = {
   collectsAnswers?: boolean;
   /** Where this tool's data comes from. Cited under any answer built on it. */
   source?: Source;
-  run: (args: any) => unknown;
+  run: (args: any, ctx: ToolContext) => unknown;
 };
+
+/**
+ * What one request works on. The seeded orders plus the ones this browser has
+ * raised — never shared memory, so one visitor's POs can't reach another and
+ * nothing outlives the tab.
+ */
+export type ToolContext = { orders: PurchaseOrder[] };
+
+/** Orders on the way for a material, the way the agent should name them. */
+const onOrder = (materialId: string, orders: PurchaseOrder[]) =>
+  openOrders(materialId, orders).map((o) => ({
+    poNumber: o.poNumber,
+    vendor: vendorById(o.vendorId)?.name,
+    quantity: o.qty,
+    arrives: o.expectedOn,
+  }));
 
 const obj = (props: Record<string, unknown>, required: string[] = []) => ({
   type: "object",
@@ -80,7 +98,7 @@ const words = (text: string) =>
  * alias — and the best match comes first. "M30 RMC", "rmc" and "ready mix"
  * all land on the same item.
  */
-function findMaterials(query: string) {
+export function findMaterials(query: string) {
   // A date's day number is not a spec — "by 18 Sept" matched "18 SWG" wire.
   const undated = query.replace(
     /\b\d{1,2}(st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/gi,
@@ -112,38 +130,55 @@ export const TOOLS: ToolDef[] = [
 
 This is the right first call whenever the user asks what they are short on, what needs ordering, what is running low, or what to buy this week. It already does the stock lookup and the requirement lookup together — do NOT call stock_check first to answer a "what are we short on" question.
 
-Returns one row per material with: what the plan needs, what is on hand, what is already reserved, the resulting shortfall, the date it is needed by, and the activity driving the requirement. Materials with enough stock are excluded.
+Returns \`short\`: one row per material that still needs ordering, with what the plan needs, what is on hand, what is reserved, what is already on the way (inTransit), the resulting shortfall, the need-by date and the activity driving it.
+
+**shortfall is already net of inTransit** — it is what still needs ordering. Never subtract in-transit orders again, and never order the gross gap.
+
+Also returns \`notShort\`: every other material, with what is on site and the orders on the way (onOrder). These are NOT shortfalls — never put them in a shortfall table, and don't mention them at all unless the user asks to order or asks about one of them. Then say in one line why it isn't needed.
 
 Always mention the need-by date when you present these — a shortfall that is due in 5 days is a different problem from one due in 3 weeks, and the user needs to see which is which.`,
     parameters: obj({}),
-    run: () =>
-      MATERIALS.filter((m) => shortfall(m) > 0).map((m) => ({
+    run: (_args: unknown, { orders }: ToolContext) => ({
+      // Soonest need-by first — the order the table is read in.
+      short: MATERIALS.filter((m) => shortfall(m, orders) > 0)
+        .sort((a, b) => a.neededBy.localeCompare(b.neededBy))
+        .map((m) => ({
+          material: `${m.name} (${m.spec})`,
+          materialId: m.id,
+          required: m.required,
+          inStock: m.inStock,
+          reserved: m.reserved,
+          available: available(m),
+          inTransit: inTransit(m.id, orders),
+          shortfall: shortfall(m, orders),
+          unit: m.unit,
+          neededBy: m.neededBy,
+          daysRemaining: daysUntil(m.neededBy),
+          drivenBy: m.activity,
+        })),
+      notShort: MATERIALS.filter((m) => shortfall(m, orders) <= 0).map((m) => ({
         material: `${m.name} (${m.spec})`,
         materialId: m.id,
         required: m.required,
-        inStock: m.inStock,
-        reserved: m.reserved,
-        available: available(m),
-        shortfall: shortfall(m),
+        onSite: available(m),
         unit: m.unit,
-        neededBy: m.neededBy,
-        daysRemaining: daysUntil(m.neededBy),
-        drivenBy: m.activity,
+        onOrder: onOrder(m.id, orders),
       })),
+    }),
   },
   {
     name: "stock_check",
     source: SOURCES.inventory,
     label: "Checking site stock",
     short: "Checking stock",
-    description: `Current stock position for ONE material at the project site: quantity on hand, quantity reserved against other activities, and what is genuinely free to use.
+    description: `Current stock position for ONE material at the project site: quantity on hand, quantity reserved against other activities, what is genuinely free to use, what is already on the way (inTransit, and the orders behind it in onOrder), and what still needs ordering (stillShort — already net of inTransit).
 
 Use this when the user asks about a specific material's stock. For "what are we short on" across the whole project, use shortfall_report instead — it is one call rather than six.`,
     parameters: obj(
       { materialId: { type: "string", description: "Material id from shortfall_report or material_search." } },
       ["materialId"],
     ),
-    run: ({ materialId }: { materialId: string }) => {
+    run: ({ materialId }: { materialId: string }, { orders }: ToolContext) => {
       const m = materialById(materialId);
       if (!m) return { error: `No material with id ${materialId}` };
       return {
@@ -151,6 +186,9 @@ Use this when the user asks about a specific material's stock. For "what are we 
         inStock: m.inStock,
         reserved: m.reserved,
         available: available(m),
+        inTransit: inTransit(m.id, orders),
+        onOrder: onOrder(m.id, orders),
+        stillShort: shortfall(m, orders),
         unit: m.unit,
         site: PROJECT.site,
       };
@@ -171,11 +209,9 @@ Call this before any tool that takes a materialId when all you have is a name th
   },
   {
     name: "vendor_search",
-    label: "Finding approved vendors",
+    label: "Finding vendors",
     short: "Finding vendors",
     description: `List vendors who supply a given material.
-
-IMPORTANT: only vendors with approved=true may be used on a purchase order. Unapproved vendors are returned so you can see they exist, but you must never put one on a PO, and you must never offer to approve one — vendor approval is an admin function outside your scope. If the user asks you to use an unapproved vendor, explain that it needs to go through vendor onboarding first.
 
 Returns rating (out of 5) and on-time delivery percentage — both are relevant when recommending between vendors.`,
     parameters: obj({ materialId: { type: "string" } }, ["materialId"]),
@@ -183,7 +219,6 @@ Returns rating (out of 5) and on-time delivery percentage — both are relevant 
       VENDORS.filter((v) => v.supplies.includes(materialId)).map((v) => ({
         vendorId: v.id,
         name: v.name,
-        approved: v.approved,
         rating: v.rating,
         onTimePct: v.onTimePct,
         location: v.location,
@@ -193,7 +228,7 @@ Returns rating (out of 5) and on-time delivery percentage — both are relevant 
     name: "quote_compare",
     label: "Comparing quotes",
     short: "Comparing quotes",
-    description: `Side-by-side comparison of live vendor quotes for one material: rate per unit, lead time in days, minimum order quantity, and quote validity.
+    description: `Side-by-side comparison of live vendor quotes for one material: rate per unit, the date it would arrive (arrives) and whether that is before the need-by date (inTime), and minimum order quantity. Show the arrives date to the user, never the lead time in days.
 
 This is the tool that produces the comparison the user actually decides on, so call it before recommending a vendor. Compute the landed cost yourself from rate x quantity.
 
@@ -220,15 +255,16 @@ Present all viable options with the tradeoff visible, recommend one, and give th
           return {
             vendorId: q.vendorId,
             vendor: v?.name,
-            approved: v?.approved,
             rating: v?.rating,
             onTimePct: v?.onTimePct,
             rate: q.rate,
             leadDays: q.leadDays,
+            // Worked out here so the table shows a date, never "8 days".
+            arrives: arrivalDate(q.vendorId, [materialId]),
+            inTime: !!m && (arrivalDate(q.vendorId, [materialId]) ?? "") <= m.neededBy,
             moq: q.moq,
             meetsMoq: quantity >= q.moq,
             subtotal: Math.round(q.rate * quantity),
-            validTill: q.validTill,
           };
         }),
       };
@@ -236,21 +272,23 @@ Present all viable options with the tradeoff visible, recommend one, and give th
   },
   {
     name: "rate_history",
-    source: SOURCES.orders,
     label: "Pulling past rates",
     short: "Checking past rates",
     description: `What this project last paid for a material, and to whom. Use it to sanity-check a quote before recommending it — a rate well above the last purchase is worth flagging to the user, and a rate below it is worth pointing out as a win.
 
 Returns most recent first. Empty if the material has never been purchased.`,
     parameters: obj({ materialId: { type: "string" } }, ["materialId"]),
-    run: ({ materialId }: { materialId: string }) =>
-      RATE_HISTORY.filter((r) => r.materialId === materialId)
-        .sort((a, b) => b.orderedOn.localeCompare(a.orderedOn))
-        .map((r) => ({
-          vendor: vendorById(r.vendorId)?.name,
-          rate: r.rate,
-          qty: r.qty,
-          orderedOn: r.orderedOn,
+    // Read from the purchase orders themselves, so a past rate and the PO it
+    // came from can never disagree.
+    run: ({ materialId }: { materialId: string }, { orders }: ToolContext) =>
+      orders.filter((o) => o.materialId === materialId)
+        .sort((a, b) => b.raisedOn.localeCompare(a.raisedOn))
+        .map((o) => ({
+          vendor: vendorById(o.vendorId)?.name,
+          rate: o.rate,
+          qty: o.qty,
+          orderedOn: o.raisedOn,
+          poNumber: o.poNumber,
         })),
   },
   {
@@ -260,12 +298,12 @@ Returns most recent first. Empty if the material has never been purchased.`,
     short: "Checking orders",
     description: `List purchase orders on this project with their delivery status.
 
-Worth calling before raising a new PO for a material — there may already be one in transit that covers the shortfall, in which case the right answer is "you already have 18 tonnes arriving on the 15th" rather than a new order.`,
+The shortfall from shortfall_report already takes these off — never subtract them again.`,
     parameters: obj({
       materialId: { type: "string", description: "Optional: filter to one material." },
     }),
-    run: ({ materialId }: { materialId?: string }) =>
-      PURCHASE_ORDERS.filter((p) => !materialId || p.materialId === materialId).map((p) => {
+    run: ({ materialId }: { materialId?: string }, { orders }: ToolContext) =>
+      orders.filter((p) => !materialId || p.materialId === materialId).map((p) => {
         const m = materialById(p.materialId);
         return {
           poNumber: p.poNumber,
@@ -299,18 +337,11 @@ Worth calling before raising a new PO for a material — there may already be on
     name: "ask_user",
     label: "Asking you a couple of questions",
     short: "Asking you",
-    description: `Ask the user the one or two choices only they can make, BEFORE raising a purchase order. The interface shows each question as a card with numbered options, a free-text "Something else" row, and Skip.
+    description: `Ask the user how they want to find a vendor, when they ask to find vendors for something, order it or raise a PO for it without naming a vendor. The interface shows it as a card with numbered options, a free-text row, and Skip.
 
-Call this AFTER your read tools and BEFORE \`po_create\`. By the time you ask, you must already know the material, spec, shortfall quantity, need-by date and the live quotes — the questions are about what the user WANTS, never about facts you could look up yourself.
+Call it AFTER your lookups, once, with ONE question however many materials there are. Options, in order: reorder from the last vendor (named, with their current rate — leave out if never bought), "Compare vendors", "Raise a new REQ". Keep each option a short phrase, no ids.
 
-Ask exactly ONE question — how to source what they need — however many materials are involved. It has two options:
-
-1. Reorder from the vendor used last, named inline with the rate and date from \`rate_history\`.
-2. "Raise a new REQ", always last and in those words.
-
-Never ask one question per material: four shortfalls is still one question. Never offer "compare all approved vendors" — a REQ is how fresh quotes get gathered.
-
-Never use this to ask for permission — the purchase order card is the permission step.`,
+Never use it to ask for permission — the purchase order card is the permission step.`,
     parameters: obj(
       {
         questions: {
@@ -340,53 +371,115 @@ Never use this to ask for permission — the purchase order card is the permissi
     run: () => ({ ok: true }),
   },
 
+  {
+    name: "order_totals",
+    label: "Adding up the orders",
+    short: "Adding up",
+    description: `Works out a vendor split: for each vendor and the materials they would supply, the quantity to order (the shortfall, raised to the vendor's minimum order where needed), the arrival date, and the total before GST.
+
+Call this whenever you show a combination of vendors, and copy its numbers exactly. Never add up money yourself. Use its quantities when you raise the POs.`,
+    parameters: obj(
+      {
+        groups: {
+          type: "array",
+          items: obj(
+            {
+              vendorId: { type: "string" },
+              materialIds: { type: "array", items: { type: "string" } },
+            },
+            ["vendorId", "materialIds"],
+          ),
+        },
+      },
+      ["groups"],
+    ),
+    run: ({ groups }: { groups: { vendorId: string; materialIds: string[] }[] }, { orders }: ToolContext) => {
+      const inr = (n: number) => `₹${new Intl.NumberFormat("en-IN").format(Math.round(n))}`;
+      const rows = (groups ?? []).map((g) => {
+        const lines = g.materialIds.map((id) => {
+          const m = materialById(id);
+          const q = QUOTES.find((x) => x.vendorId === g.vendorId && x.materialId === id);
+          const short = m ? shortfall(m, orders) : 0;
+          const quantity = q ? Math.max(short, q.moq) : short;
+          return {
+            material: m ? `${m.name} (${m.spec})` : id,
+            materialId: id,
+            quantity,
+            unit: m?.unit,
+            roundedUpToMinimum: !!q && q.moq > short,
+            rate: q?.rate ?? null,
+            amount: q ? Math.round(q.rate * quantity) : null,
+            noQuote: !q,
+          };
+        });
+        const total = lines.reduce((n, l) => n + (l.amount ?? 0), 0);
+        const arrives = arrivalDate(g.vendorId, g.materialIds);
+        const needBy = g.materialIds.map((id) => materialById(id)?.neededBy).filter(Boolean).sort()[0];
+        return {
+          vendor: vendorById(g.vendorId)?.name ?? g.vendorId,
+          vendorId: g.vendorId,
+          lines,
+          arrives,
+          inTime: !!arrives && !!needBy && arrives <= needBy,
+          totalBeforeGst: inr(total),
+        };
+      });
+      return { rows };
+    },
+  },
+
   // --------------------------------------------------------- write (gated)
   {
     name: "po_create",
     label: "Raising the purchase order",
     short: "Raising PO",
-    description: `Raise a purchase order against an approved vendor. This commits the project to a spend, so it always goes to the user for approval before anything is issued.
+    description: `Raise a purchase order. This commits the project to a spend, so it always goes to the user for approval before anything is issued.
 
 Preconditions — satisfy ALL of these before calling:
-- The vendor is approved (vendor_search returns approved=true).
-- You have compared quotes and can state why this vendor over the others.
+- The user has named this vendor, after you showed them the vendors. Never pick the vendor for them.
 - The quantity is at or above the vendor's MOQ.
 - The lead time lands on or before the need-by date.
 
 Pass the rate exactly as quoted. GST is added downstream — do not include it in the rate. Never invent a rate, a vendor or a PO number.
 
-Do not ask for confirmation in chat before calling this. The approval card shows the vendor, the amount and the delivery date, and the user approves or rejects there.`,
+Several vendors → one call with one entry per vendor in \`orders\`. Never raise them in separate calls.
+
+Do not ask for confirmation in chat before calling this. Each order shows as its own card, and the user raises or changes each one there.`,
     parameters: obj(
       {
-        vendorId: { type: "string" },
-        items: {
+        orders: {
           type: "array",
           description:
-            "Every material being bought from this vendor on this order. One order can carry several materials — do not split them into separate POs when the same vendor supplies them all.",
+            "One entry per vendor. When the user has chosen several vendors, put every one of them here in this single call, so all the cards show together.",
           items: obj(
             {
-              materialId: { type: "string" },
-              quantity: { type: "number" },
-              rate: { type: "number", description: "Per-unit rate, exactly as quoted. Excludes GST." },
+              vendorId: { type: "string" },
+              items: {
+                type: "array",
+                description:
+                  "Every material being bought from this vendor. One order can carry several materials — do not split them when the same vendor supplies them all.",
+                items: obj(
+                  {
+                    materialId: { type: "string" },
+                    quantity: { type: "number" },
+                    rate: { type: "number", description: "Per-unit rate, exactly as quoted. Excludes GST." },
+                  },
+                  ["materialId", "quantity", "rate"],
+                ),
+              },
+              justification: {
+                type: "string",
+                description: "One sentence: why this vendor. Kept on the record, not shown on the card.",
+              },
             },
-            ["materialId", "quantity", "rate"],
+            ["vendorId", "items", "justification"],
           ),
         },
-        deliverBy: {
-          type: "string",
-          description:
-            "YYYY-MM-DD. Only used when this vendor has no live quote for an item. Otherwise it is ignored: the arrival date is calculated from today plus the quoted lead time.",
-        },
-        justification: {
-          type: "string",
-          description:
-            "One sentence the approver will read: why this vendor over the alternatives. The card already shows the delivery date and how much float it leaves, so do not restate either — spend the sentence on what the alternatives cost or when they would have landed.",
-        },
       },
-      ["vendorId", "items", "justification"],
+      ["orders"],
     ),
     requiresApproval: true,
-    run: (args: any) => {
+    run: (args: any, { orders }: ToolContext) => {
       const lines = (args.items ?? []).map((it: any) => ({
         material: materialById(it.materialId),
         materialId: it.materialId,
@@ -395,13 +488,13 @@ Do not ask for confirmation in chat before calling this. The approval card shows
         amount: Math.round(it.rate * it.quantity),
       }));
       const subtotal = lines.reduce((n: number, l: any) => n + l.amount, 0);
-      const poNumber = `PO-2026-${String(413 + PURCHASE_ORDERS.length - 2).padStart(4, "0")}`;
+      const poNumber = nextPoNumber(orders);
       const deliverBy =
         arrivalDate(args.vendorId, lines.map((l: any) => l.materialId)) ?? args.deliverBy;
       // The store keeps one row per material; they share the PO number.
       for (const l of lines) {
-        PURCHASE_ORDERS.push({
-          id: `po_${PURCHASE_ORDERS.length + 1}`,
+        orders.push({
+          id: `po_${orders.length + 1}`,
           poNumber,
           vendorId: args.vendorId,
           materialId: l.materialId,

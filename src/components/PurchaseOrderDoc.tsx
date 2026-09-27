@@ -25,31 +25,31 @@ export default function PurchaseOrderDoc({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-[17px] font-medium tabular-nums leading-none text-txt">
+              <h2 className="text-[18px] font-medium tabular-nums leading-none text-txt">
                 {card.reference}
               </h2>
-              <p className="mt-1.5 text-[11.5px] text-txt-faint">
+              <p className="mt-1.5 text-[12px] text-txt-faint">
                 Raised {card.raisedOn ?? prettyToday()} · {PROJECT.name}
               </p>
             </div>
-            <Status issued={issued} />
+            <Status issued={issued} status={card.status} />
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-6">
             <Block label="From">
-              <p className="text-[13px] font-medium text-txt">{PROJECT.name}</p>
-              <p className="mt-0.5 text-[11.5px] text-txt-faint">{card.deliverTo}</p>
+              <p className="text-[14px] font-medium text-txt">{PROJECT.name}</p>
+              <p className="mt-0.5 text-[12px] text-txt-dim">{card.deliverTo}</p>
               {card.neededFor && (
-                <p className="mt-0.5 text-[11.5px] text-txt-faint">{card.neededFor}</p>
+                <p className="mt-0.5 text-[12px] text-txt-dim">{card.neededFor}</p>
               )}
             </Block>
             <Block label="To">
-              <p className="text-[13px] font-medium text-txt">{card.vendor}</p>
+              <p className="text-[14px] font-medium text-txt">{card.vendor}</p>
               {card.vendorLocation && (
-                <p className="mt-0.5 text-[11.5px] text-txt-faint">{card.vendorLocation}</p>
+                <p className="mt-0.5 text-[12px] text-txt-dim">{card.vendorLocation}</p>
               )}
               {card.vendorRating != null && (
-                <p className="mt-0.5 text-[11.5px] text-txt-faint">
+                <p className="mt-0.5 text-[12px] text-txt-dim">
                   {card.vendorRating} rating, {card.vendorOnTime}% on time
                 </p>
               )}
@@ -58,13 +58,13 @@ export default function PurchaseOrderDoc({
 
           <div className="mt-6 overflow-hidden rounded-[8px] border border-line">
             <div className="flex items-center gap-3 border-b border-line-soft bg-surface px-3 py-2">
-              <span className="flex-1 text-[10.5px] uppercase tracking-[0.06em] text-txt-faint">
+              <span className="flex-1 text-[11px] uppercase tracking-[0.06em] text-txt-faint">
                 Material
               </span>
-              <span className="w-24 text-right text-[10.5px] uppercase tracking-[0.06em] text-txt-faint">
+              <span className="w-24 text-right text-[11px] uppercase tracking-[0.06em] text-txt-faint">
                 Qty
               </span>
-              <span className="w-28 text-right text-[10.5px] uppercase tracking-[0.06em] text-txt-faint">
+              <span className="w-28 text-right text-[11px] uppercase tracking-[0.06em] text-txt-faint">
                 Amount
               </span>
             </div>
@@ -74,13 +74,13 @@ export default function PurchaseOrderDoc({
                 className="flex items-start gap-3 border-b border-line-soft px-3 py-2.5 last:border-b-0"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] text-txt">{line.material}</p>
+                  <p className="text-[14px] text-txt">{line.material}</p>
                   <p className="mt-0.5 text-[11px] text-txt-faint">{line.rate}</p>
                 </div>
-                <span className="w-24 shrink-0 text-right text-[12.5px] tabular-nums text-txt-dim">
+                <span className="w-24 shrink-0 text-right text-[14px] tabular-nums text-txt-dim">
                   {line.quantity}
                 </span>
-                <span className="w-28 shrink-0 text-right text-[12.5px] tabular-nums text-txt">
+                <span className="w-28 shrink-0 text-right text-[14px] tabular-nums text-txt">
                   {line.amount}
                 </span>
               </div>
@@ -104,6 +104,18 @@ export default function PurchaseOrderDoc({
  * there is room, a clock when it lands on the day, a warning when it does not.
  */
 function Banner({ card }: { card: PoCard }) {
+  // A delivered order has nothing left to beat — it just landed.
+  if (card.status === "Delivered") {
+    return (
+      <div className="shrink-0 border-b border-line-soft bg-raised px-6 py-2.5">
+        <p className="flex items-center gap-2 text-[14px] font-medium text-txt-dim">
+          <CheckIcon />
+          <span>Delivered {card.deliverBy}</span>
+        </p>
+      </div>
+    );
+  }
+
   const late = card.floatDays != null && card.floatDays < 0;
   const tight = card.floatDays === 0;
   const bad = Boolean(card.warning) || late;
@@ -116,7 +128,7 @@ function Banner({ card }: { card: PoCard }) {
 
   return (
     <div className={`shrink-0 border-b px-6 py-2.5 ${tone.wrap}`}>
-      <p className={`flex items-center gap-2 text-[12.5px] font-medium ${tone.text}`}>
+      <p className={`flex items-center gap-2 text-[14px] font-medium ${tone.text}`}>
         {bad ? <WarningIcon /> : tight ? <ClockIcon /> : <CheckIcon />}
         <span>
           Arrives {card.deliverBy}
@@ -168,14 +180,17 @@ function floatPhrase(days: number) {
   return `${Math.abs(days)} days late`;
 }
 
-function Status({ issued }: { issued?: boolean }) {
+/** An order on file shows where it really stands; a proposal is a draft until raised. */
+function Status({ issued, status }: { issued?: boolean; status?: PoCard["status"] }) {
+  const label = status ?? (issued ? "Issued" : "Draft");
+  const live = label === "Issued" || label === "In Transit";
   return (
     <span
-      className={`shrink-0 rounded-[4px] px-1.5 py-[3px] text-[10px] font-medium uppercase tracking-[0.07em] ${
-        issued ? "bg-accent-soft text-accent-ink" : "bg-raised text-txt-faint"
+      className={`shrink-0 rounded-[4px] px-1.5 py-[3px] text-[11px] font-medium uppercase tracking-[0.07em] ${
+        live ? "bg-accent-soft text-accent-ink" : "bg-raised text-txt-faint"
       }`}
     >
-      {issued ? "Issued" : "Draft"}
+      {label}
     </span>
   );
 }
@@ -183,7 +198,7 @@ function Status({ issued }: { issued?: boolean }) {
 function Block({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] uppercase tracking-[0.07em] text-txt-faint">{label}</p>
+      <p className="text-[11px] uppercase tracking-[0.07em] text-txt-faint">{label}</p>
       <div className="mt-1.5">{children}</div>
     </div>
   );
@@ -196,10 +211,10 @@ function Total({ label, value, strong }: { label: string; value: string; strong?
         strong ? "border-t border-line" : "border-b border-line-soft"
       }`}
     >
-      <dt className={`text-[11.5px] ${strong ? "text-txt" : "text-txt-faint"}`}>{label}</dt>
+      <dt className={`text-[12px] ${strong ? "text-txt" : "text-txt-faint"}`}>{label}</dt>
       <dd
         className={`text-right tabular-nums ${
-          strong ? "text-[15px] font-medium text-txt" : "text-[12.5px] text-txt-dim"
+          strong ? "text-[16px] font-medium text-txt" : "text-[12px] text-txt-dim"
         }`}
       >
         {value}

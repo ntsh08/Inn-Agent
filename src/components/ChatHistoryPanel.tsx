@@ -39,8 +39,8 @@ export default function ChatHistoryPanel({
   return (
     <aside className="flex h-full w-[35%] min-w-[280px] max-w-[400px] shrink-0 flex-col border-l border-line bg-bg">
       <header className="flex shrink-0 items-center gap-2.5 border-b border-line-soft px-4 py-3">
-        <span className="flex-1 text-[13px] font-medium text-txt">Past chats</span>
-        <span className="rounded-[4px] border border-line px-1.5 py-px text-[10px] text-txt-faint">
+        <span className="flex-1 text-[14px] font-medium text-txt">Past chats</span>
+        <span className="rounded-[4px] border border-line px-1.5 py-px text-[11px] text-txt-faint">
           Esc
         </span>
         <button
@@ -56,7 +56,7 @@ export default function ChatHistoryPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {chats.length === 0 ? (
-          <p className="px-4 py-4 text-[12.5px] leading-relaxed text-txt-faint">
+          <p className="px-4 py-4 text-[12px] leading-relaxed text-txt-faint">
             Nothing here yet. Chats land here when you start a new one.
           </p>
         ) : (
@@ -68,7 +68,7 @@ export default function ChatHistoryPanel({
                 c.id === currentId ? "bg-raised" : ""
               }`}
             >
-              <span className="line-clamp-2 text-[12.5px] leading-snug text-txt">{c.title}</span>
+              <span className="line-clamp-2 text-[14px] leading-snug text-txt">{c.title}</span>
               <span className="text-[11px] text-txt-faint">{dayLabel(c.at)}</span>
             </button>
           ))

@@ -13,12 +13,12 @@ export const SKILLS: Skill[] = [
   {
     name: "buy-materials",
     description:
-      "How to take a material shortfall through to an approved purchase order: sizing the order, screening vendors, weighing rate against lead time and reliability, GST and MOQ arithmetic, and what the approver needs to see. Load this before recommending a vendor or raising any PO.",
+      "How to take a material shortfall through to a purchase order: sizing the order, screening vendors, weighing rate against lead time and reliability, GST and MOQ arithmetic, and what the approver needs to see. Load this before recommending a vendor or raising any PO.",
     body: `# Buying materials
 
 ## Sizing the order
 
-Order the **shortfall**, not the full requirement. If the plan needs 800 bags and 160 are on site, you buy 640. Stock already held is stock already paid for.
+Order the **shortfall** from shortfall_report, not the full requirement. It already takes off stock on site and orders already on the way: if the plan needs 24 t of steel, 3.2 t is on site and 18 t is in transit, the shortfall is 2.8 t and that is what you size from. Stock held or already ordered is stock already paid for.
 
 Adjust upward for one reason only:
 - **MOQ.** If the vendor's minimum order exceeds the shortfall, you must order the minimum. Say so explicitly — the user should know why they are buying more than they need.
@@ -29,9 +29,8 @@ Round to whole units the vendor actually sells in. Nobody delivers 647.3 bags.
 
 ## Screening vendors
 
-1. **Approved only.** Unapproved vendors cannot go on a PO. There is no exception, no matter how good the rate is. If an unapproved vendor is materially cheaper, you may mention that onboarding them is worth considering — but you cannot do it and you cannot use them now.
-2. **Lead time against the need-by date.** Compute it. A vendor whose lead time overshoots the date is out of the running, and you say that directly: "Deccan is ₹23 a bag cheaper but 8 days out — the pour is in 5, so it doesn't work." Never present an undeliverable vendor as a cheaper alternative.
-3. **Then price, reliability and rating** among whoever is left.
+1. **Lead time against the need-by date.** Compute it. A vendor whose lead time overshoots the date is out of the running, and you say that directly: "Deccan is ₹23 a bag cheaper but 8 days out — the pour is in 5, so it doesn't work." Never present an undeliverable vendor as a cheaper alternative.
+2. **Then price, reliability and rating** among whoever is left.
 
 ## Weighing the remaining options
 
@@ -50,7 +49,7 @@ Recommend one. Give the reason in one sentence. Do not hide the alternatives.
 
 ## The money
 
-Rates are quoted **excluding GST**. Construction materials are 28%.
+Rates are quoted **excluding GST**. Use 18% for every material.
 
 Always present: subtotal, GST, total. The approver is agreeing to the total, so the total is the number that should be hardest to miss.
 
@@ -69,7 +68,7 @@ Write the justification for someone who was not in the conversation. "Cheapest t
 
 ## After the PO
 
-Confirm what was issued, to whom, for how much, arriving when. Then offer the genuinely next thing: usually tracking the delivery, or dealing with whatever else was on the shortfall list. Do not invent follow-ups.`,
+One line per PO: what was issued, to whom, arriving when, total. Then one line on what is still short — exactly the stillShort list the po_create result gives you. No reasons for the vendor choice — the user made it.`,
   },
 ];
 

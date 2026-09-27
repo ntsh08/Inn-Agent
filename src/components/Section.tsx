@@ -27,7 +27,7 @@ export default function Section({
           {/* No project name here — the suite bar above already says which
               project you are in, and saying it twice reads as a template. */}
           <h1 className="text-[22px] font-medium tracking-[-0.01em] text-txt">{title}</h1>
-          {summary && <div className="mt-1.5 text-[13px] text-txt-dim">{summary}</div>}
+          {summary && <div className="mt-1.5 text-[14px] text-txt-dim">{summary}</div>}
         </header>
         {children}
       </div>

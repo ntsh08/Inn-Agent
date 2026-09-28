@@ -12,6 +12,7 @@ import {
   arrivalDate,
   materialById,
   nextPoNumber,
+  openOrders,
   shortfall,
   vendorById,
   PROJECT,
@@ -265,19 +266,36 @@ export function orderContext(
       const purpose = `for the ${m.activity.split(" — ").pop()} (needed ${dayMonth(m.neededBy)})`;
       const short = shortfall(m, all);
       const moq = QUOTES.find((q) => q.vendorId === o.vendorId && q.materialId === m.id)?.moq ?? 0;
+      // What was asked for, and what the vendor's minimum makes it.
+      const asked = it.quantity;
+      const qty = Math.max(asked, moq);
       const Name = `${name[0].toUpperCase()}${name.slice(1)}`;
       const lead = (first: boolean) =>
         first ? `You're short ${amount(short)}` : `${Name} is short by ${units(short)}`;
       const its = (first: boolean) => (first ? "the" : "its");
+      const minimum = `${vendors} minimum order is ${units(moq)}`;
 
-      if (Math.abs(it.quantity - short) < 0.01) {
+      if (short <= 0) {
+        // Already covered, so this is extra — say what covers it.
+        const covering = openOrders(m.id, all).map((p) => p.poNumber);
+        const covered = covering.length
+          ? `${Name} is already covered by ${listOf(Array.from(new Set(covering)))}, so this is extra`
+          : `${Name} isn't short, so this is extra`;
+        other.push((f) =>
+          qty > asked
+            ? `${covered} — you asked for ${units(asked)}, but ${minimum}, so ${its(f)} PO is for ${units(qty)}.`
+            : qty === moq
+              ? `${covered}: ${amount(qty)}, ${vendors} minimum order.`
+              : `${covered}: ${amount(qty)}, as you asked.`,
+        );
+      } else if (Math.abs(qty - short) < 0.01) {
         exact.push({ text: `${amount(short)} ${purpose}`, vendorId: o.vendorId });
-      } else if (short > 0 && moq > short && Math.abs(it.quantity - moq) < 0.01) {
-        other.push((f) => `${lead(f)} ${purpose}, but ${vendors} minimum order is ${units(moq)}, so ${its(f)} PO is for ${units(it.quantity)}.`);
-      } else if (short <= 0) {
-        other.push((f) => `${Name} isn't short — ${its(f)} PO is for ${amount(it.quantity)}, as you asked.`);
+      } else if (qty > asked || (qty === moq && moq > short)) {
+        // Whether the model sent the shortfall or already rounded it up, the
+        // minimum is the reason — say so rather than "as you asked".
+        other.push((f) => `${lead(f)} ${purpose}, but ${minimum}, so ${its(f)} PO is for ${units(qty)}.`);
       } else {
-        other.push((f) => `${lead(f)} ${purpose}; ${its(f)} PO is for ${units(it.quantity)}, as you asked.`);
+        other.push((f) => `${lead(f)} ${purpose}; ${its(f)} PO is for ${units(qty)}, as you asked.`);
       }
     }
   }

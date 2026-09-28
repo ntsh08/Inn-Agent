@@ -83,8 +83,11 @@ function isOrder(o: any): o is PurchaseOrder {
  * and the raised PO all read from here, so they can't disagree.
  */
 function ordersOf(args: any): any[] {
-  const orders = Array.isArray(args?.orders) ? args.orders : args?.vendorId ? [args] : [];
-  return orders.map(asQuoted);
+  return ordersAsAsked(args).map(asQuoted);
+}
+
+function ordersAsAsked(args: any): any[] {
+  return Array.isArray(args?.orders) ? args.orders : args?.vendorId ? [args] : [];
 }
 
 export async function POST(req: NextRequest) {
@@ -159,9 +162,11 @@ export async function POST(req: NextRequest) {
       // why each quantity, then one card per PO (or the question card), and
       // the turn waits.
       const presentGate = (gated: { id: string; name: string; args: string }[]) => {
+        // As asked, not as quoted — the line has to say when a vendor's
+        // minimum made the order bigger than what was asked for.
         const raising = gated
           .filter((c) => c.name === "po_create")
-          .flatMap((c) => ordersOf(JSON.parse(c.args || "{}")));
+          .flatMap((c) => ordersAsAsked(JSON.parse(c.args || "{}")));
         const context = raising.length ? orderContext(raising, ctx.orders) : "";
         if (context) send({ t: "note", v: context });
 

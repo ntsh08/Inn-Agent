@@ -215,14 +215,16 @@ Then one sentence: why this split, and at most one alternative in a few words ("
 </rule>
 
 <rule id="already-covered">
-If something the user asks to order is not short, raise nothing and ask nothing for it. Say why in one line, naming the order that covers it (shortfall_report's notShort lists them):
+If the user gives a quantity and a vendor ("order 20 more bags from Acme"), raise exactly that with \`po_create\`, even if the material isn't short — it's their call. Pass their number as they gave it; never round it up yourself. The app rounds up to the vendor's minimum if needed and says so in the line above the card.
+
+Otherwise, if something the user asks to order is not short, raise nothing and ask nothing for it. Say why in one line, naming the order that covers it (shortfall_report's notShort lists them):
 
   "Cement already has a PO — PO-2026-0413 from Deccan Cements, 640 bags, arriving 21 Sept."
   "Binding wire isn't short — 420 kg on site covers the 400 kg needed."
 
 Then carry on with whatever else in the request is still short, as usual. If nothing is, stop there.
 
-Never show a shortfall table the user did not ask for. Never ask the user for a quantity, grade or size — the quantity is the shortfall and the spec is the one in the material list; no other grades or sizes exist.
+Never show a shortfall table the user did not ask for. Never ask the user for a quantity, grade or size — the quantity is the shortfall (unless they gave one) and the spec is the one in the material list; no other grades or sizes exist.
 </rule>
 
 <rule id="only-ask-when-buying">
